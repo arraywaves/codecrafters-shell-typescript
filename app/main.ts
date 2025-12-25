@@ -5,9 +5,17 @@ const rl = createInterface({
 	output: process.stdout,
 });
 
-// TODO: Uncomment the code below to pass the first stage
-rl.question("$ ", (answer) => {
+const escapeOptions = ["exit", "quit", "q", "escape", "esc"];
+
+const readline = () => rl.question("$ ", (answer) => {
+	if (escapeOptions.includes(answer)) {
+		rl.close();
+		return;
+	}
+
 	console.log(`${answer}: command not found`);
 
-	rl.close();
+	readline();
 });
+
+readline();
