@@ -6,8 +6,7 @@ const rl = createInterface({
 });
 
 const escapeOptions = ["exit", "quit", "q", "escape", "esc"];
-const echoOptions = ["echo"];
-const shellCommands = [...escapeOptions, ...echoOptions];
+const shellCommands = [...escapeOptions, "echo", "type"];
 
 const readline = () => rl.question("$ ", (answer) => {
 	if (escapeOptions.includes(answer)) {
