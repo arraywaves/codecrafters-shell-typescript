@@ -12,9 +12,13 @@ const readline = () => rl.question("$ ", (answer) => {
 		rl.close();
 		return;
 	}
+	if (answer.startsWith("echo")) {
+		console.log(answer.slice(5));
+		readline();
+		return;
+	}
 
 	console.log(`${answer}: command not found`);
-
 	readline();
 });
 
