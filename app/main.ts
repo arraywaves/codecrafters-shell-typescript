@@ -8,53 +8,76 @@ const rl = createInterface({
 });
 
 const escapeOptions = ["exit", "quit", "q", "escape", "esc"];
-const shellCommands = [...escapeOptions, "echo", "type"];
+const builtInCommands = ["echo", "type"];
+const shellCommands = [...escapeOptions, ...builtInCommands];
 
 const readline = () => rl.question("$ ", (answer) => {
-	const [command, ...args] = answer.split(" ");
+	const [commandOrExe, ...args] = answer.split(" ");
 
-	if (escapeOptions.includes(answer)) {
-		rl.close();
+	if (shellCommands.includes(commandOrExe)) {
+		handleShellCommands(commandOrExe, args);
 		return;
 	}
-	if (command === "echo") {
-		console.log(...args);
-		readline();
-		return;
-	}
-	if (command === "type") {
-		const checkCommand = args[0];
-		if (shellCommands.includes(checkCommand)) {
-			console.log(`${checkCommand} is a shell builtin`);
-			readline();
-			return;
-		} else {
-			let found = false;
-			let paths = process.env.PATH?.split(path.delimiter);
 
-			if (paths) {
-				for (const dir of paths) {
-					const fullPath = path.join(dir, checkCommand);
-
-					try {
-						fs.accessSync(fullPath, fs.constants.X_OK);
-						console.log(`${checkCommand} is ${fullPath}`);
-						found = true;
-						break;
-					} catch (err) {
-						// Not found
-					}
-				}
-			}
-
-			if (!found) console.log(`${checkCommand}: not found`);
-		}
-		readline();
-		return;
+	const isExecutable = checkIsExecutable(args[0], process.env.PATH || "");
+	if (isExecutable) {
+		console.log("exe");
 	}
 
 	console.log(`${answer}: command not found`);
 	readline();
+	return;
 });
-
 readline();
+
+function handleShellCommands(command: string, args: string[]) {
+	if (escapeOptions.includes(command)) {
+		rl.close();
+		return;
+	}
+	switch (command) {
+		case "echo":
+			handleEcho(args);
+			readline();
+			return;
+		case "type":
+			const checkBuiltIn = args[0];
+			handleType(checkBuiltIn);
+			readline();
+			return;
+		default:
+			break;
+	}
+}
+function handleEcho(args: string[]) {
+	console.log(...args);
+}
+function handleType(checkBuiltIn: string) {
+	if (shellCommands.includes(checkBuiltIn)) {
+		console.log(`${checkBuiltIn} is a shell builtin`);
+	} else {
+		checkIsExecutable(checkBuiltIn, process.env.PATH || "", true);
+	}
+}
+function checkIsExecutable(command: string, pathToCheck: string, log = false) {
+	let isExecutable = false;
+	let paths = pathToCheck.split(path.delimiter);
+
+	if (paths) {
+		for (const dir of paths) {
+			const fullPath = path.join(dir, command);
+
+			try {
+				fs.accessSync(fullPath, fs.constants.X_OK);
+				if (log) console.log(`${command} is ${fullPath}`);
+				isExecutable = true;
+				break;
+			} catch (err) {
+				// Not found here.
+			}
+		}
+	}
+
+	if (log) if (!isExecutable) console.log(`${command}: not found`);
+	return isExecutable;
+}
