@@ -1,5 +1,6 @@
 import { createInterface } from "readline";
 import * as fs from 'fs';
+import * as path from 'path';
 
 const rl = createInterface({
 	input: process.stdin,
@@ -29,21 +30,20 @@ const readline = () => rl.question("$ ", (answer) => {
 			return;
 		} else {
 			let found = false;
-			let paths = process.env.PATH?.split(":");
+			let paths = process.env.PATH?.split(path.delimiter);
 
 			if (paths) {
 				for (const dir of paths) {
-					let isExecutable = false;
-					fs.access(dir, fs.constants.X_OK, (err) => {
-						isExecutable = err ? false : true;
-					});
+					const fullPath = path.join(dir, checkCommand);
 
-					if (isExecutable) {
-						console.log(`${checkCommand} is ${dir}`);
+					try {
+						fs.accessSync(fullPath, fs.constants.X_OK);
+						console.log(`${checkCommand} is ${fullPath}`);
 						found = true;
-						readline();
-						return;
-					};
+						break;
+					} catch (err) {
+						// Not found
+					}
 				}
 			}
 
