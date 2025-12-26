@@ -12,7 +12,12 @@ const escapeOptions = ["exit", "quit", "q", "escape", "esc"];
 const builtInCommands = ["echo", "type"];
 const shellCommands = [...escapeOptions, ...builtInCommands];
 
-const readline = () => rl.question("$ ", (answer) => {
+promptUser();
+
+function promptUser() {
+	rl.question("$ ", handleUserInput);
+}
+function handleUserInput(answer: string) {
 	const [commandOrExe, ...args] = answer.split(" ");
 
 	if (shellCommands.includes(commandOrExe)) {
@@ -26,15 +31,15 @@ const readline = () => rl.question("$ ", (answer) => {
 		return;
 	} else if (commandOrExe && args.length > 0) {
 		console.log(`${commandOrExe}: ${args[0]} not found`);
-		readline();
+		promptUser();
 		return;
 	}
 
-	console.log(`${answer}: command not found`);
-	readline();
-});
-readline();
-
+	if (commandOrExe) {
+		console.log(`${answer}: command not found`);
+	}
+	promptUser();
+}
 function handleExecutable(commandOrExe: string, args: string[]) {
 	try {
 		exec(`${commandOrExe} ${args.join(" ")}`, (err, stdout, stderr) => {
@@ -45,13 +50,13 @@ function handleExecutable(commandOrExe: string, args: string[]) {
 				console.error(stderr);
 			}
 			if (stdout) {
-				console.log(stdout);
+				process.stdout.write(stdout);
 			}
-			readline();
+			promptUser();
 		});
 	} catch (err) {
 		console.error(err);
-		readline();
+		promptUser();
 	}
 }
 function handleShellCommands(command: string, args: string[]) {
@@ -63,16 +68,13 @@ function handleShellCommands(command: string, args: string[]) {
 	switch (command) {
 		case "echo":
 			handleEcho(args);
-			readline();
-			return;
+			break;
 		case "type":
 			const checkBuiltIn = args[0];
 			handleType(checkBuiltIn || "");
-			readline();
-			return;
-		default:
 			break;
 	}
+	promptUser();
 }
 function handleEcho(args: string[]) {
 	console.log(...args);
