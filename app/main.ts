@@ -1,6 +1,7 @@
 import { createInterface } from "readline";
 import * as fs from 'fs';
 import * as path from 'path';
+import { exec } from "child_process";
 
 const rl = createInterface({
 	input: process.stdin,
@@ -19,14 +20,35 @@ const readline = () => rl.question("$ ", (answer) => {
 		return;
 	}
 
-	const isExecutable = checkIsExecutable(args[0], process.env.PATH || "");
-	if (isExecutable) {
-		console.log("exe");
+	if (commandOrExe) {
+		const isExecutable = checkIsExecutable(commandOrExe, process.env.PATH || "");
+		if (isExecutable) {
+			try {
+				exec(`${commandOrExe} ${args.join(" ")}`, (error, stdout, stderr) => {
+					if (error) {
+						console.error(`Error: ${error.message}`);
+					}
+					if (stderr) {
+						console.error(stderr);
+					}
+					if (stdout) {
+						console.log(stdout);
+					}
+					readline();
+				});
+			} catch (err) {
+				console.error(err);
+				readline();
+			}
+		} else {
+			console.log(`${commandOrExe}: ${args[0]} not found`);
+			readline();
+		}
+		return;
 	}
 
 	console.log(`${answer}: command not found`);
 	readline();
-	return;
 });
 readline();
 
@@ -35,6 +57,7 @@ function handleShellCommands(command: string, args: string[]) {
 		rl.close();
 		return;
 	}
+
 	switch (command) {
 		case "echo":
 			handleEcho(args);
@@ -42,7 +65,7 @@ function handleShellCommands(command: string, args: string[]) {
 			return;
 		case "type":
 			const checkBuiltIn = args[0];
-			handleType(checkBuiltIn);
+			handleType(checkBuiltIn || "");
 			readline();
 			return;
 		default:
@@ -52,19 +75,29 @@ function handleShellCommands(command: string, args: string[]) {
 function handleEcho(args: string[]) {
 	console.log(...args);
 }
-function handleType(checkBuiltIn: string) {
-	if (shellCommands.includes(checkBuiltIn)) {
-		console.log(`${checkBuiltIn} is a shell builtin`);
+function handleType(checkCommand: string) {
+	if (checkCommand === "") {
+		console.log("Please include a command to check");
+	} else if (shellCommands.includes(checkCommand)) {
+		console.log(`${checkCommand} is a shell builtin`);
 	} else {
-		checkIsExecutable(checkBuiltIn, process.env.PATH || "", true);
+		const pathVariable = process.env.PATH;
+		if (pathVariable && pathVariable !== "") {
+			checkIsExecutable(checkCommand, pathVariable, true);
+		} else {
+			console.log(`${checkCommand}: please set PATH`);
+		}
 	}
 }
 function checkIsExecutable(command: string, pathToCheck: string, log = false) {
 	let isExecutable = false;
-	let paths = pathToCheck.split(path.delimiter);
+	let directories = pathToCheck.split(path.delimiter);
 
-	if (paths) {
-		for (const dir of paths) {
+	if (directories) {
+		for (const dir of directories) {
+			if (!command) {
+				break;
+			}
 			const fullPath = path.join(dir, command);
 
 			try {
