@@ -20,30 +20,13 @@ const readline = () => rl.question("$ ", (answer) => {
 		return;
 	}
 
-	if (commandOrExe) {
-		const isExecutable = checkIsExecutable(commandOrExe, process.env.PATH || "");
-		if (isExecutable) {
-			try {
-				exec(`${commandOrExe} ${args.join(" ")}`, (error, stdout, stderr) => {
-					if (error) {
-						console.error(`Error: ${error.message}`);
-					}
-					if (stderr) {
-						console.error(stderr);
-					}
-					if (stdout) {
-						console.log(stdout);
-					}
-					readline();
-				});
-			} catch (err) {
-				console.error(err);
-				readline();
-			}
-		} else {
-			console.log(`${commandOrExe}: ${args[0]} not found`);
-			readline();
-		}
+	const isExecutable = checkIsExecutable(commandOrExe, process.env.PATH || "");
+	if (isExecutable) {
+		handleExecutable(commandOrExe, args);
+		return;
+	} else if (commandOrExe && args.length > 0) {
+		console.log(`${commandOrExe}: ${args[0]} not found`);
+		readline();
 		return;
 	}
 
@@ -52,6 +35,25 @@ const readline = () => rl.question("$ ", (answer) => {
 });
 readline();
 
+function handleExecutable(commandOrExe: string, args: string[]) {
+	try {
+		exec(`${commandOrExe} ${args.join(" ")}`, (err, stdout, stderr) => {
+			if (err) {
+				console.error(`Error: ${err.message}`);
+			}
+			if (stderr) {
+				console.error(stderr);
+			}
+			if (stdout) {
+				console.log(stdout);
+			}
+			readline();
+		});
+	} catch (err) {
+		console.error(err);
+		readline();
+	}
+}
 function handleShellCommands(command: string, args: string[]) {
 	if (escapeOptions.includes(command)) {
 		rl.close();
@@ -77,7 +79,7 @@ function handleEcho(args: string[]) {
 }
 function handleType(checkCommand: string) {
 	if (checkCommand === "") {
-		console.log("Please include a command to check");
+		console.log("type: please include an argument");
 	} else if (shellCommands.includes(checkCommand)) {
 		console.log(`${checkCommand} is a shell builtin`);
 	} else {
