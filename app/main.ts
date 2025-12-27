@@ -8,9 +8,11 @@ const rl = createInterface({
 	output: process.stdout,
 });
 
-const escapeOptions = ["exit", "quit", "q", "escape", "esc"];
-const builtInCommands = ["echo", "type", "pwd"];
-const shellCommands = [...escapeOptions, ...builtInCommands];
+const shellCommands = {
+	escape: ["exit", "quit", "q", "escape", "esc"],
+	builtin: ["echo", "type", "pwd"]
+} as const;
+type ShellCommand = typeof shellCommands.escape[number] | typeof shellCommands.builtin[number];
 
 promptUser();
 
@@ -20,7 +22,7 @@ function promptUser() {
 function handleUserInput(answer: string) {
 	const [commandOrExe, ...args] = answer.split(" ");
 
-	if (shellCommands.includes(commandOrExe)) {
+	if (isShellCommand(commandOrExe)) {
 		handleShellCommands(commandOrExe, args);
 		return;
 	}
@@ -60,8 +62,8 @@ function handleExecutable(commandOrExe: string, args: string[]) {
 		promptUser();
 	}
 }
-function handleShellCommands(command: string, args: string[]) {
-	if (escapeOptions.includes(command)) {
+function handleShellCommands(command: ShellCommand, args: string[]) {
+	if (isEscapeCommand(command)) {
 		rl.close();
 		return;
 	}
@@ -82,7 +84,7 @@ function handleShellCommands(command: string, args: string[]) {
 }
 
 function handlePrintWorkingDir() {
-	console.log(path);
+	console.log(process.cwd());
 }
 function handleEcho(args: string[]) {
 	console.log(...args);
@@ -90,7 +92,7 @@ function handleEcho(args: string[]) {
 function handleType(checkCommand: string) {
 	if (checkCommand === "") {
 		console.log("type: please include an argument");
-	} else if (shellCommands.includes(checkCommand)) {
+	} else if (isShellCommand(checkCommand)) {
 		console.log(`${checkCommand} is a shell builtin`);
 	} else {
 		const pathVariable = process.env.PATH;
@@ -100,6 +102,16 @@ function handleType(checkCommand: string) {
 			console.log(`${checkCommand}: please set PATH`);
 		}
 	}
+}
+
+function isShellCommand(command: string): command is ShellCommand {
+	return isEscapeCommand(command) || isShellBuiltInCommand(command);
+}
+function isEscapeCommand(command: string): command is typeof shellCommands.escape[number] {
+	return shellCommands.escape.includes(command as any);
+}
+function isShellBuiltInCommand(command: string): command is typeof shellCommands.escape[number] {
+	return shellCommands.escape.includes(command as any);
 }
 function checkIsExecutable(command: string, pathToCheck: string, log = false) {
 	let isExecutable = false;
