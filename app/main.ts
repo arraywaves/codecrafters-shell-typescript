@@ -102,7 +102,7 @@ function handleChangeDir(dir: string) {
 		fs.accessSync(finalPath);
 		process.chdir(fs.realpathSync(finalPath));
 
-		console.log(`New directory: ${process.cwd()}`);
+		// console.log(`New directory: ${process.cwd()}`);
 	} catch (err) {
 		console.error(`cd: ${err}`);
 	}
