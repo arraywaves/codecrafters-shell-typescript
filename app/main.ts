@@ -1,5 +1,6 @@
 import { createInterface } from "readline";
 import * as fs from 'fs';
+import * as os from 'os';
 import * as path from 'path';
 import { exec } from "child_process";
 
@@ -88,10 +89,9 @@ function handleChangeDir(dir: string) {
 	let finalPath = dir;
 
 	if (dir.includes("~")) {
-		const homeDir = dir.replace(/^~/, process.env.HOME || "");
+		const homeDir = dir.replace(/^~/, os.homedir() || "");
 
 		finalPath = homeDir;
-		console.log("New path:", finalPath);
 	}
 
 	if (!path.isAbsolute(finalPath)) {
@@ -101,8 +101,6 @@ function handleChangeDir(dir: string) {
 	try {
 		fs.accessSync(finalPath);
 		process.chdir(fs.realpathSync(finalPath));
-
-		// console.log(`New directory: ${process.cwd()}`);
 	} catch (_err) {
 		console.error(`cd: ${dir}: No such file or directory`);
 	}
