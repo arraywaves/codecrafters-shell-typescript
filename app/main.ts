@@ -103,8 +103,8 @@ function handleChangeDir(dir: string) {
 		process.chdir(fs.realpathSync(finalPath));
 
 		// console.log(`New directory: ${process.cwd()}`);
-	} catch (err) {
-		console.error(`cd: ${err}`);
+	} catch (_err) {
+		console.error(`cd: ${dir}: No such file or directory`);
 	}
 }
 function handlePrintWorkingDir() {
