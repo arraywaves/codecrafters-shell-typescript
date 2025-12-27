@@ -9,7 +9,7 @@ const rl = createInterface({
 });
 
 const escapeOptions = ["exit", "quit", "q", "escape", "esc"];
-const builtInCommands = ["echo", "type"];
+const builtInCommands = ["echo", "type", "pwd"];
 const shellCommands = [...escapeOptions, ...builtInCommands];
 
 promptUser();
