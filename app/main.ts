@@ -40,6 +40,7 @@ function handleUserInput(answer: string) {
 	}
 	promptUser();
 }
+
 function handleExecutable(commandOrExe: string, args: string[]) {
 	try {
 		exec(`${commandOrExe} ${args.join(" ")}`, (err, stdout, stderr) => {
@@ -69,12 +70,19 @@ function handleShellCommands(command: string, args: string[]) {
 		case "echo":
 			handleEcho(args);
 			break;
+		case "pwd":
+			handlePrintWorkingDir();
+			break;
 		case "type":
 			const checkBuiltIn = args[0];
 			handleType(checkBuiltIn || "");
 			break;
 	}
 	promptUser();
+}
+
+function handlePrintWorkingDir() {
+	console.log(path);
 }
 function handleEcho(args: string[]) {
 	console.log(...args);
