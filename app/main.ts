@@ -10,7 +10,7 @@ const rl = createInterface({
 
 const shellCommands = {
 	escape: ["exit", "quit", "q", "escape", "esc"],
-	builtin: ["echo", "type", "pwd"]
+	builtin: ["echo", "type", "pwd", "cd"]
 } as const;
 type ShellCommand = typeof shellCommands.escape[number] | typeof shellCommands.builtin[number];
 
@@ -67,6 +67,9 @@ function handleShellCommands(command: ShellCommand, args: string[]) {
 	}
 
 	switch (command) {
+		case "cd":
+			handleChangeDir(args[0]);
+			break;
 		case "echo":
 			handleEcho(args);
 			break;
@@ -81,6 +84,29 @@ function handleShellCommands(command: ShellCommand, args: string[]) {
 	promptUser();
 }
 
+function handleChangeDir(dir: string) {
+	let finalPath = dir;
+
+	if (dir.includes("~")) {
+		const homeDir = dir.replace(/^~/, process.env.HOME || "");
+
+		finalPath = homeDir;
+		console.log("New path:", finalPath);
+	}
+
+	if (!path.isAbsolute(finalPath)) {
+		finalPath = path.resolve(finalPath);
+	}
+
+	try {
+		fs.accessSync(finalPath);
+		process.chdir(fs.realpathSync(finalPath));
+
+		console.log(`New directory: ${process.cwd()}`);
+	} catch (err) {
+		console.error(`cd: ${err}`);
+	}
+}
 function handlePrintWorkingDir() {
 	console.log(process.cwd());
 }
