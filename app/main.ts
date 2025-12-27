@@ -26,9 +26,7 @@ function handleUserInput(answer: string) {
 		handleShellCommands(commandOrExe, args);
 		return;
 	}
-
-	const isExecutable = checkIsExecutable(commandOrExe, process.env.PATH || "");
-	if (isExecutable) {
+	if (checkIsExecutable(commandOrExe, process.env.PATH || "")) {
 		handleExecutable(commandOrExe, args);
 		return;
 	} else if (commandOrExe && args.length > 0) {
@@ -110,8 +108,8 @@ function isShellCommand(command: string): command is ShellCommand {
 function isEscapeCommand(command: string): command is typeof shellCommands.escape[number] {
 	return shellCommands.escape.includes(command as any);
 }
-function isShellBuiltInCommand(command: string): command is typeof shellCommands.escape[number] {
-	return shellCommands.escape.includes(command as any);
+function isShellBuiltInCommand(command: string): command is typeof shellCommands.builtin[number] {
+	return shellCommands.builtin.includes(command as any);
 }
 function checkIsExecutable(command: string, pathToCheck: string, log = false) {
 	let isExecutable = false;
