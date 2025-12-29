@@ -117,6 +117,11 @@ function handleFormatting(answer: string) {
 				inSingleQuotes = false;
 				continue;
 			case "\"":
+				if (tokens[0] === "cat") currentToken += char;
+				if (inSingleQuotes) {
+					currentToken += char;
+					continue;
+				}
 				if (!inDoubleQuotes) {
 					inDoubleQuotes = true;
 					continue;
