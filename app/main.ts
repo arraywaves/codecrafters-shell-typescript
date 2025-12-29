@@ -105,7 +105,7 @@ function handleFormatting(answer: string) {
 
 		switch (char) {
 			case "\'":
-				if (tokens[0] === "cat") currentToken += char;
+				if (tokens[0] === "cat" && !inDoubleQuotes) currentToken += char;
 				if (inDoubleQuotes) {
 					currentToken += char;
 					continue;
@@ -117,7 +117,7 @@ function handleFormatting(answer: string) {
 				inSingleQuotes = false;
 				continue;
 			case "\"":
-				if (tokens[0] === "cat") currentToken += char;
+				if (tokens[0] === "cat" && !inSingleQuotes) currentToken += char;
 				if (inSingleQuotes) {
 					currentToken += char;
 					continue;
