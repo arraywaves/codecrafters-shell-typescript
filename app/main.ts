@@ -91,11 +91,15 @@ function handleFormatting(answer: string) {
 	const tokens: string[] = [];
 
 	let inQuotes = false;
+	let preCh;
 	let currentToken = "";
 
 	for (const char of formattedAnswer) {
+		if (!preCh) preCh = char;
+
 		if (inQuotes) {
 			if (char === "\'") {
+				if (tokens[0] === "cat") currentToken += char;
 				inQuotes = false;
 				continue;
 			}
@@ -107,6 +111,8 @@ function handleFormatting(answer: string) {
 
 			currentToken += char;
 			continue;
+		} else if ((preCh === "\"" || preCh === "\'") && (char === "\"" || char === "\'")) {
+			console.log("double")
 		}
 
 		if (delimiters.includes(char)) {
@@ -121,6 +127,7 @@ function handleFormatting(answer: string) {
 			case "\'":
 				if (!inQuotes) {
 					inQuotes = true;
+					if (tokens[0] === "cat") currentToken += char;
 					continue;
 				};
 				inQuotes = false;
