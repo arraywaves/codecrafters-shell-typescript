@@ -114,7 +114,7 @@ function handleFormatting(answer: string) {
 		}
 		switch (char) {
 			case "\\":
-				if (!inEscape) {
+				if (!inEscape && !inSingleQuotes && !inDoubleQuotes) {
 					inEscape = true;
 					continue;
 				}
