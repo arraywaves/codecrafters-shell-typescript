@@ -92,16 +92,16 @@ function handleFormatting(answer: string) {
 
 	let inSingleQuotes = false;
 	let inDoubleQuotes = false;
-	let inEscape = false;
+	let escape = false;
 	let currentToken = "";
 
 	function updateToken(char: string) {
-		if (inEscape) inEscape = false;
+		if (escape) escape = false;
 		currentToken += char;
 	}
 
 	for (const char of formattedAnswer) {
-		if (inEscape) {
+		if (escape) {
 			updateToken(char);
 			continue;
 		}
@@ -114,8 +114,8 @@ function handleFormatting(answer: string) {
 		}
 		switch (char) {
 			case "\\":
-				if (!inEscape && !inSingleQuotes && !inDoubleQuotes) {
-					inEscape = true;
+				if (!escape && !inSingleQuotes) {
+					escape = true;
 					continue;
 				}
 				updateToken(char);
@@ -146,7 +146,7 @@ function handleFormatting(answer: string) {
 				continue;
 			case "\~":
 				if (!inSingleQuotes && !inDoubleQuotes) {
-					currentToken += os.homedir();
+					updateToken(os.homedir());
 				}
 				continue;
 			default:
