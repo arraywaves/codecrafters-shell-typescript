@@ -92,22 +92,34 @@ function handleFormatting(answer: string) {
 
 	let inSingleQuotes = false;
 	let inDoubleQuotes = false;
+	let inEscape = false;
 	let currentToken = "";
 
+	function updateToken(char: string) {
+		currentToken += char;
+	}
+
 	for (const char of formattedAnswer) {
-		if (delimiters.includes(char) && !inSingleQuotes && !inDoubleQuotes) {
+		if (delimiters.includes(char) && !inSingleQuotes && !inDoubleQuotes && !inEscape) {
 			if (currentToken.length > 0) {
 				tokens.push(currentToken)
 				currentToken = "";
 			};
 			continue;
 		}
-
 		switch (char) {
+			case "\\":
+				if (!inEscape) {
+					inEscape = true;
+					continue;
+				}
+				updateToken(char);
+				inEscape = false;
+				continue;
 			case "\'":
-				if (tokens[0] === "cat" && !inDoubleQuotes) currentToken += char;
+				if (tokens[0] === "cat" && !inDoubleQuotes) updateToken(char);
 				if (inDoubleQuotes) {
-					currentToken += char;
+					updateToken(char);
 					continue;
 				}
 				if (!inSingleQuotes) {
@@ -117,9 +129,9 @@ function handleFormatting(answer: string) {
 				inSingleQuotes = false;
 				continue;
 			case "\"":
-				if (tokens[0] === "cat" && !inSingleQuotes) currentToken += char;
+				if (tokens[0] === "cat" && !inSingleQuotes) updateToken(char);
 				if (inSingleQuotes) {
-					currentToken += char;
+					updateToken(char);
 					continue;
 				}
 				if (!inDoubleQuotes) {
@@ -134,7 +146,7 @@ function handleFormatting(answer: string) {
 				}
 				continue;
 			default:
-				currentToken += char;
+				updateToken(char);
 				continue;
 		}
 	}
