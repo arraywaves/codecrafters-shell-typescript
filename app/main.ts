@@ -19,15 +19,16 @@ promptUser();
 
 function promptUser() {
 	rl.question("$ ", handleUserInput);
+	// TODO: preferred prompt: rl.question(`${process.cwd().split(path.sep)[process.cwd().split(path.sep).length - 1]} → `, handleUserInput);
 }
 function handleUserInput(answer: string) {
-	const [commandOrExe, ...args] = answer.split(" ");
+	const [commandOrExe, ...args] = handleFormatting(answer);
 
 	if (isShellCommand(commandOrExe)) {
 		handleShellCommands(commandOrExe, args);
 		return;
 	}
-	if (checkIsExecutable(commandOrExe, process.env.PATH || "")) {
+	if (isExecutable(commandOrExe, process.env.PATH || "")) {
 		handleExecutable(commandOrExe, args);
 		return;
 	} else if (commandOrExe && args.length > 0) {
@@ -84,15 +85,80 @@ function handleShellCommands(command: ShellCommand, args: string[]) {
 	}
 	promptUser();
 }
+function handleFormatting(answer: string) {
+	const formattedAnswer = answer.normalize("NFC");
+	const delimiters = [" ", "\t"];
+	const tokens: string[] = [];
+
+	let inQuotes = false;
+	let currentToken = "";
+
+	for (const char of formattedAnswer) {
+		if (inQuotes) {
+			if (char === "\'") {
+				inQuotes = false;
+				continue;
+			}
+			if (char === "\'") {
+				currentToken += char;
+				inQuotes = false;
+				continue;
+			}
+
+			currentToken += char;
+			continue;
+		}
+
+		if (delimiters.includes(char)) {
+			if (currentToken.length > 0) {
+				tokens.push(currentToken)
+				currentToken = "";
+			};
+			continue;
+		}
+
+		switch (char) {
+			case "\'":
+				if (!inQuotes) {
+					inQuotes = true;
+					continue;
+				};
+				inQuotes = false;
+				continue;
+			case "\"":
+				if (!inQuotes) {
+					inQuotes = true;
+					currentToken += char;
+					continue;
+				};
+				inQuotes = false;
+				continue;
+			case "\~":
+				if (!inQuotes) {
+					currentToken += os.homedir();
+				}
+				continue;
+			default:
+				currentToken += char;
+				continue;
+		}
+	}
+	if (currentToken.length > 0) {
+		tokens.push(currentToken)
+		currentToken = "";
+	};
+
+	return tokens;
+}
 
 function handleChangeDir(dir: string) {
 	let finalPath = dir;
 
-	if (dir.includes("~")) {
-		const homeDir = dir.replace(/^~/, os.homedir() || "");
+	// if (dir.includes("~")) {
+	// 	const homeDir = dir.replace(/^~/, os.homedir() || "");
 
-		finalPath = homeDir;
-	}
+	// 	finalPath = homeDir;
+	// }
 
 	if (!path.isAbsolute(finalPath)) {
 		finalPath = path.resolve(finalPath);
@@ -119,7 +185,7 @@ function handleType(checkCommand: string) {
 	} else {
 		const pathVariable = process.env.PATH;
 		if (pathVariable && pathVariable !== "") {
-			checkIsExecutable(checkCommand, pathVariable, true);
+			isExecutable(checkCommand, pathVariable, true);
 		} else {
 			console.log(`${checkCommand}: please set PATH`);
 		}
@@ -135,8 +201,8 @@ function isEscapeCommand(command: string): command is typeof shellCommands.escap
 function isShellBuiltInCommand(command: string): command is typeof shellCommands.builtin[number] {
 	return shellCommands.builtin.includes(command as any);
 }
-function checkIsExecutable(command: string, pathToCheck: string, log = false) {
-	let isExecutable = false;
+function isExecutable(command: string, pathToCheck: string, log = false) {
+	let commandIsExecutable = false;
 	let directories = pathToCheck.split(path.delimiter);
 
 	if (directories) {
@@ -149,7 +215,7 @@ function checkIsExecutable(command: string, pathToCheck: string, log = false) {
 			try {
 				fs.accessSync(fullPath, fs.constants.X_OK);
 				if (log) console.log(`${command} is ${fullPath}`);
-				isExecutable = true;
+				commandIsExecutable = true;
 				break;
 			} catch (err) {
 				// Not found here.
@@ -157,6 +223,6 @@ function checkIsExecutable(command: string, pathToCheck: string, log = false) {
 		}
 	}
 
-	if (log) if (!isExecutable) console.log(`${command}: not found`);
-	return isExecutable;
+	if (log) if (!commandIsExecutable) console.log(`${command}: not found`);
+	return commandIsExecutable;
 }
