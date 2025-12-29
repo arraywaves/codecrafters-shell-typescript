@@ -2,7 +2,7 @@ import { createInterface } from "readline";
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { exec } from "child_process";
+import { exec, execFile } from "child_process";
 
 const rl = createInterface({
 	input: process.stdin,
@@ -45,7 +45,7 @@ function handleUserInput(answer: string) {
 
 function handleExecutable(commandOrExe: string, args: string[]) {
 	try {
-		exec(`${commandOrExe} ${args.join(" ")}`, (err, stdout, stderr) => {
+		execFile(commandOrExe, args, (err, stdout, stderr) => {
 			if (err) {
 				console.error(`Error: ${err.message}`);
 			}
@@ -89,29 +89,33 @@ function handleFormatting(answer: string) {
 	const formattedAnswer = answer.normalize("NFC");
 	const tokens: string[] = [];
 	const delimiters = [" ", "\t"];
-	const dQuoteEscapes = ["\"", "\\", "\$", "\`"];
 
 	let inSingleQuotes = false;
 	let inDoubleQuotes = false;
 	let escape = false;
-	let prevChar = "";
 	let currentToken = "";
 
 	function updateToken(char: string) {
-		if (escape) escape = false;
-		prevChar = char;
 		currentToken += char;
 	}
 
 	for (const char of formattedAnswer) {
 		if (escape) {
-			updateToken(char);
+			if (inDoubleQuotes) {
+				if (["\"", "\\", "$", "`"].includes(char)) {
+					updateToken(char);
+				} else {
+					updateToken("\\" + char);
+				}
+			} else {
+				updateToken(char);
+			}
+			escape = false;
 			continue;
 		}
 		if (delimiters.includes(char) && !inSingleQuotes && !inDoubleQuotes) {
 			if (currentToken.length > 0) {
 				tokens.push(currentToken)
-				prevChar = char;
 				currentToken = "";
 			};
 			continue;
@@ -120,31 +124,22 @@ function handleFormatting(answer: string) {
 			case "\\":
 				if (!escape && !inSingleQuotes) {
 					escape = true;
-					prevChar = "\\";
 					continue;
 				}
 				updateToken(char);
 				continue;
 			case "\'":
-				if (tokens[0] === "cat" && !inDoubleQuotes) updateToken(char);
 				if (inDoubleQuotes) {
 					updateToken(char);
 					continue;
 				}
 				if (!inSingleQuotes) {
 					inSingleQuotes = true;
-					continue;
-				};
-				inSingleQuotes = false;
+				} else {
+					inSingleQuotes = false;
+				}
 				continue;
 			case "\"":
-				if (tokens[0] === "cat" && !inSingleQuotes) {
-					if (prevChar === "\\") {
-						updateToken("\'" + char)
-						continue;
-					};
-					updateToken(char);
-				};
 				if (inSingleQuotes) {
 					updateToken(char);
 					continue;
@@ -152,10 +147,11 @@ function handleFormatting(answer: string) {
 				if (!inDoubleQuotes) {
 					inDoubleQuotes = true;
 					continue;
-				};
-				inDoubleQuotes = false;
+				} else {
+					inDoubleQuotes = false;
+				}
 				continue;
-			case "\~":
+			case "~":
 				if (!inSingleQuotes && !inDoubleQuotes) {
 					updateToken(os.homedir());
 				} else {
@@ -169,7 +165,6 @@ function handleFormatting(answer: string) {
 	}
 	if (currentToken.length > 0) {
 		tokens.push(currentToken)
-		currentToken = "";
 	};
 
 	return tokens;
