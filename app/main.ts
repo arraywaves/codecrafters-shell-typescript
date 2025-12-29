@@ -87,16 +87,19 @@ function handleShellCommands(command: ShellCommand, args: string[]) {
 }
 function handleFormatting(answer: string) {
 	const formattedAnswer = answer.normalize("NFC");
-	const delimiters = [" ", "\t"];
 	const tokens: string[] = [];
+	const delimiters = [" ", "\t"];
+	const dQuoteEscapes = ["\"", "\\", "\$", "\`"];
 
 	let inSingleQuotes = false;
 	let inDoubleQuotes = false;
 	let escape = false;
+	let prevChar = "";
 	let currentToken = "";
 
 	function updateToken(char: string) {
 		if (escape) escape = false;
+		prevChar = char;
 		currentToken += char;
 	}
 
@@ -108,6 +111,7 @@ function handleFormatting(answer: string) {
 		if (delimiters.includes(char) && !inSingleQuotes && !inDoubleQuotes) {
 			if (currentToken.length > 0) {
 				tokens.push(currentToken)
+				prevChar = char;
 				currentToken = "";
 			};
 			continue;
@@ -116,6 +120,7 @@ function handleFormatting(answer: string) {
 			case "\\":
 				if (!escape && !inSingleQuotes) {
 					escape = true;
+					prevChar = "\\";
 					continue;
 				}
 				updateToken(char);
@@ -133,7 +138,13 @@ function handleFormatting(answer: string) {
 				inSingleQuotes = false;
 				continue;
 			case "\"":
-				if (tokens[0] === "cat" && !inSingleQuotes) updateToken(char);
+				if (tokens[0] === "cat" && !inSingleQuotes) {
+					if (prevChar === "\\") {
+						updateToken("\'" + char)
+						continue;
+					};
+					updateToken(char);
+				};
 				if (inSingleQuotes) {
 					updateToken(char);
 					continue;
@@ -147,6 +158,8 @@ function handleFormatting(answer: string) {
 			case "\~":
 				if (!inSingleQuotes && !inDoubleQuotes) {
 					updateToken(os.homedir());
+				} else {
+					updateToken(char);
 				}
 				continue;
 			default:
@@ -164,12 +177,6 @@ function handleFormatting(answer: string) {
 
 function handleChangeDir(dir: string) {
 	let finalPath = dir;
-
-	// if (dir.includes("~")) {
-	// 	const homeDir = dir.replace(/^~/, os.homedir() || "");
-
-	// 	finalPath = homeDir;
-	// }
 
 	if (!path.isAbsolute(finalPath)) {
 		finalPath = path.resolve(finalPath);
