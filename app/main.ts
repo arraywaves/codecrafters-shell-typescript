@@ -96,12 +96,16 @@ function handleFormatting(answer: string) {
 	let currentToken = "";
 
 	function updateToken(char: string) {
+		if (inEscape) inEscape = false;
 		currentToken += char;
-		inEscape = false;
 	}
 
 	for (const char of formattedAnswer) {
-		if (delimiters.includes(char) && !inSingleQuotes && !inDoubleQuotes && !inEscape) {
+		if (inEscape) {
+			updateToken(char);
+			continue;
+		}
+		if (delimiters.includes(char) && !inSingleQuotes && !inDoubleQuotes) {
 			if (currentToken.length > 0) {
 				tokens.push(currentToken)
 				currentToken = "";
