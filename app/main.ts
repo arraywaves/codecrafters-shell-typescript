@@ -97,6 +97,7 @@ function handleFormatting(answer: string) {
 
 	function updateToken(char: string) {
 		currentToken += char;
+		inEscape = false;
 	}
 
 	for (const char of formattedAnswer) {
@@ -114,7 +115,6 @@ function handleFormatting(answer: string) {
 					continue;
 				}
 				updateToken(char);
-				inEscape = false;
 				continue;
 			case "\'":
 				if (tokens[0] === "cat" && !inDoubleQuotes) updateToken(char);
