@@ -90,32 +90,12 @@ function handleFormatting(answer: string) {
 	const delimiters = [" ", "\t"];
 	const tokens: string[] = [];
 
-	let inQuotes = false;
-	let preCh;
+	let inSingleQuotes = false;
+	let inDoubleQuotes = false;
 	let currentToken = "";
 
 	for (const char of formattedAnswer) {
-		if (!preCh) preCh = char;
-
-		if (inQuotes) {
-			if (char === "\'") {
-				if (tokens[0] === "cat") currentToken += char;
-				inQuotes = false;
-				continue;
-			}
-			if (char === "\'") {
-				currentToken += char;
-				inQuotes = false;
-				continue;
-			}
-
-			currentToken += char;
-			continue;
-		} else if ((preCh === "\"" || preCh === "\'") && (char === "\"" || char === "\'")) {
-			console.log("double")
-		}
-
-		if (delimiters.includes(char)) {
+		if (delimiters.includes(char) && !inSingleQuotes && !inDoubleQuotes) {
 			if (currentToken.length > 0) {
 				tokens.push(currentToken)
 				currentToken = "";
@@ -125,23 +105,26 @@ function handleFormatting(answer: string) {
 
 		switch (char) {
 			case "\'":
-				if (!inQuotes) {
-					inQuotes = true;
-					if (tokens[0] === "cat") currentToken += char;
-					continue;
-				};
-				inQuotes = false;
-				continue;
-			case "\"":
-				if (!inQuotes) {
-					inQuotes = true;
+				if (tokens[0] === "cat") currentToken += char;
+				if (inDoubleQuotes) {
 					currentToken += char;
 					continue;
+				}
+				if (!inSingleQuotes) {
+					inSingleQuotes = true;
+					continue;
 				};
-				inQuotes = false;
+				inSingleQuotes = false;
+				continue;
+			case "\"":
+				if (!inDoubleQuotes) {
+					inDoubleQuotes = true;
+					continue;
+				};
+				inDoubleQuotes = false;
 				continue;
 			case "\~":
-				if (!inQuotes) {
+				if (!inSingleQuotes && !inDoubleQuotes) {
 					currentToken += os.homedir();
 				}
 				continue;
