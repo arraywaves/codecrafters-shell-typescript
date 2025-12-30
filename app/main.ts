@@ -33,7 +33,7 @@ function processUserInput(answer: string) {
 		return;
 	}
 	if (isExecutable(root, process.env.PATH || "")) {
-		handleExecutable(root, args);
+		handleExecutable(root, args, outputArgs);
 		return;
 	} else if (root && args.length > 0) {
 		processOutput({
@@ -86,7 +86,6 @@ function processOutput({
 			if (!path.isAbsolute(finalPath)) {
 				finalPath = path.resolve(finalPath);
 			}
-			console.log("Final Path:", finalPath);
 			fs.writeFileSync(finalPath, formattedContent);
 		} catch (err) {
 			console.error(err);
@@ -94,10 +93,12 @@ function processOutput({
 	}
 	if (isError) {
 		console.error(formattedContent)
-	} else if (writeToStdout) {
-		process.stdout.write(formattedContent);
 	} else {
-		console.log(formattedContent);
+		if (writeToStdout) {
+			process.stdout.write(formattedContent);
+		} else {
+			console.log(formattedContent);
+		}
 	}
 }
 
