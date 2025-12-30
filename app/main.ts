@@ -127,17 +127,19 @@ function processOutput({
 function handleExecutable(command: string, args: string[], outputArgs: string[] = []) {
 	try {
 		execFile(command, args, (err, stdout, stderr) => {
+			if (err) {
+				processOutput({
+					content: (err as Error).message,
+					isError: true
+				})
+			}
 			if (stderr) {
 				processOutput({
 					content: stderr,
 					isError: true
 				})
-			} else if (err) {
-				processOutput({
-					content: `Error: ${err.message}`,
-					isError: true
-				})
-			} else if (stdout) {
+			}
+			if (stdout) {
 				processOutput({
 					content: stdout,
 					shouldWrite: outputArgs.length > 1,
