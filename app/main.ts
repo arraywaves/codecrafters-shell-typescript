@@ -2,13 +2,12 @@ import { createInterface } from "readline";
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { exec, execFile } from "child_process";
+import { execFile } from "child_process";
 
 const rl = createInterface({
 	input: process.stdin,
 	output: process.stdout,
 });
-
 const shellCommands = {
 	escape: ["exit", "quit", "q", "escape", "esc"],
 	builtin: ["echo", "type", "pwd", "cd"]
@@ -18,42 +17,113 @@ type ShellCommand = typeof shellCommands.escape[number] | typeof shellCommands.b
 promptUser();
 
 function promptUser() {
-	rl.question("$ ", handleUserInput);
-	// TODO: preferred prompt: rl.question(`${process.cwd().split(path.sep)[process.cwd().split(path.sep).length - 1]} → `, handleUserInput);
+	rl.question("$ ", processUserInput);
+	// TODO: preferred prompt: rl.question(`${process.cwd().split(path.sep)[process.cwd().split(path.sep).length - 1]} → `, processUserInput);
 }
-function handleUserInput(answer: string) {
-	const [commandOrExe, ...args] = handleFormatting(answer);
+function processUserInput(answer: string) {
+	const [root, ...args] = handleFormatting(answer);
+	let outputArgs: string[] = [];
 
-	if (isShellCommand(commandOrExe)) {
-		handleShellCommands(commandOrExe, args);
+	if (isToWrite(args)) {
+		const unixStdout = args.indexOf("1>") === -1 ? 0 : args.indexOf("1>");
+		outputArgs = args.splice(unixStdout || args.indexOf(">"), 2);
+	}
+	if (isShellCommand(root)) {
+		handleShellCommands(root, args, outputArgs);
 		return;
 	}
-	if (isExecutable(commandOrExe, process.env.PATH || "")) {
-		handleExecutable(commandOrExe, args);
+	if (isExecutable(root, process.env.PATH || "")) {
+		handleExecutable(root, args);
 		return;
-	} else if (commandOrExe && args.length > 0) {
-		console.log(`${commandOrExe}: ${args[0]} not found`);
+	} else if (root && args.length > 0) {
+		processOutput({
+			content: `${root}: ${args[0]} not found`,
+			isError: true
+		})
 		promptUser();
 		return;
 	}
 
-	if (commandOrExe) {
-		console.log(`${answer}: command not found`);
+	if (root) {
+		processOutput({
+			content: `${answer}: command not found`,
+			isError: true
+		})
 	}
 	promptUser();
 }
+function processOutput({
+	content,
+	isError = false,
+	shouldWrite = false,
+	writePath = "output.txt",
+	writeToStdout = false
+}: {
+	content: string;
+	isError?: false;
+	shouldWrite: boolean | undefined;
+	writePath: string | undefined;
+	writeToStdout?: boolean;
+} | {
+	content: string;
+	isError?: true;
+	shouldWrite?: never;
+	writePath?: never;
+	writeToStdout?: boolean;
+}) {
+	if (!content) return;
 
-function handleExecutable(commandOrExe: string, args: string[]) {
+	const formattedContent = content.normalize().trim()
+	const processedWritePath = writePath.includes(path.sep) ? writePath : `${process.cwd()}${path.sep}${writePath}`;
+
+	if (shouldWrite && processedWritePath) {
+		try {
+			const accessArray = processedWritePath.split(path.sep);
+			accessArray.pop();
+			fs.accessSync(accessArray.join(path.sep).trim());
+
+			let finalPath = processedWritePath;
+			if (!path.isAbsolute(finalPath)) {
+				finalPath = path.resolve(finalPath);
+			}
+			console.log("Final Path:", finalPath);
+			fs.writeFileSync(finalPath, formattedContent);
+		} catch (err) {
+			console.error(err);
+		}
+	}
+	if (isError) {
+		console.error(formattedContent)
+	} else if (writeToStdout) {
+		process.stdout.write(formattedContent);
+	} else {
+		console.log(formattedContent);
+	}
+}
+
+// Top Level
+function handleExecutable(command: string, args: string[], outputArgs: string[] = []) {
 	try {
-		execFile(commandOrExe, args, (err, stdout, stderr) => {
+		execFile(command, args, (err, stdout, stderr) => {
 			if (err) {
-				console.error(`Error: ${err.message}`);
+				processOutput({
+					content: `Error: ${err.message}`,
+					isError: true
+				})
 			}
 			if (stderr) {
-				console.error(stderr);
+				processOutput({
+					content: stderr,
+					isError: true
+				})
 			}
 			if (stdout) {
-				process.stdout.write(stdout);
+				processOutput({
+					content: stdout,
+					shouldWrite: outputArgs.length > 1,
+					writePath: outputArgs[1],
+					writeToStdout: true
+				})
 			}
 			promptUser();
 		});
@@ -62,7 +132,7 @@ function handleExecutable(commandOrExe: string, args: string[]) {
 		promptUser();
 	}
 }
-function handleShellCommands(command: ShellCommand, args: string[]) {
+function handleShellCommands(command: ShellCommand, args: string[], outputArgs: string[] = []) {
 	if (isEscapeCommand(command)) {
 		rl.close();
 		return;
@@ -73,14 +143,14 @@ function handleShellCommands(command: ShellCommand, args: string[]) {
 			handleChangeDir(args[0]);
 			break;
 		case "echo":
-			handleEcho(args);
+			handleEcho(args, outputArgs);
 			break;
 		case "pwd":
-			handlePrintWorkingDir();
+			handlePrintWorkingDir(outputArgs);
 			break;
 		case "type":
 			const checkBuiltIn = args[0];
-			handleType(checkBuiltIn || "");
+			handleType(checkBuiltIn || "", outputArgs);
 			break;
 	}
 	promptUser();
@@ -88,7 +158,7 @@ function handleShellCommands(command: ShellCommand, args: string[]) {
 function handleFormatting(answer: string) {
 	const formattedAnswer = answer.normalize("NFC");
 	const tokens: string[] = [];
-	const delimiters = [" ", "\t"];
+	const delimiters = ["\ ", "\t"];
 
 	let inSingleQuotes = false;
 	let inDoubleQuotes = false;
@@ -170,6 +240,7 @@ function handleFormatting(answer: string) {
 	return tokens;
 }
 
+// Built-in Commands
 function handleChangeDir(dir: string) {
 	let finalPath = dir;
 
@@ -181,30 +252,55 @@ function handleChangeDir(dir: string) {
 		fs.accessSync(finalPath);
 		process.chdir(fs.realpathSync(finalPath));
 	} catch (_err) {
-		console.error(`cd: ${dir}: No such file or directory`);
+		processOutput({
+			content: `cd: ${dir}: No such file or directory`,
+			isError: true
+		})
 	}
 }
-function handlePrintWorkingDir() {
-	console.log(process.cwd());
+function handlePrintWorkingDir(outputArgs: string[] = []) {
+	processOutput({
+		content: process.cwd(),
+		shouldWrite: outputArgs.length > 1,
+		writePath: outputArgs[1]
+	})
 }
-function handleEcho(args: string[]) {
-	console.log(...args);
+function handleEcho(args: string[], outputArgs: string[] = []) {
+	processOutput({
+		content: `${args.join(" ").trim()}`,
+		shouldWrite: outputArgs.length > 1,
+		writePath: outputArgs[1]
+	})
 }
-function handleType(checkCommand: string) {
+function handleType(checkCommand: string, outputArgs: string[] = []) {
 	if (checkCommand === "") {
-		console.log("type: please include an argument");
+		processOutput({
+			content: "type: please include an argument",
+			isError: true
+		})
 	} else if (isShellCommand(checkCommand)) {
-		console.log(`${checkCommand} is a shell builtin`);
+		processOutput({
+			content: `${checkCommand} is a shell builtin`,
+			shouldWrite: outputArgs.length > 1,
+			writePath: outputArgs[1]
+		})
 	} else {
 		const pathVariable = process.env.PATH;
 		if (pathVariable && pathVariable !== "") {
-			isExecutable(checkCommand, pathVariable, true);
+			isExecutable(checkCommand, pathVariable, true, outputArgs);
 		} else {
-			console.log(`${checkCommand}: please set PATH`);
+			processOutput({
+				content: `${checkCommand}: please set PATH`,
+				isError: true
+			})
 		}
 	}
 }
 
+// Helpers
+function isToWrite(args: string[]): boolean {
+	return args.includes(">") || args.includes("1>");
+}
 function isShellCommand(command: string): command is ShellCommand {
 	return isEscapeCommand(command) || isShellBuiltInCommand(command);
 }
@@ -214,7 +310,7 @@ function isEscapeCommand(command: string): command is typeof shellCommands.escap
 function isShellBuiltInCommand(command: string): command is typeof shellCommands.builtin[number] {
 	return shellCommands.builtin.includes(command as any);
 }
-function isExecutable(command: string, pathToCheck: string, log = false) {
+function isExecutable(command: string, pathToCheck: string, log = false, outputArgs: string[] = []) {
 	let commandIsExecutable = false;
 	let directories = pathToCheck.split(path.delimiter);
 
@@ -227,7 +323,7 @@ function isExecutable(command: string, pathToCheck: string, log = false) {
 
 			try {
 				fs.accessSync(fullPath, fs.constants.X_OK);
-				if (log) console.log(`${command} is ${fullPath}`);
+				if (log) processOutput({ content: `${command} is ${fullPath}`, shouldWrite: outputArgs.length > 1, writePath: outputArgs[1] });
 				commandIsExecutable = true;
 				break;
 			} catch (err) {
@@ -236,6 +332,6 @@ function isExecutable(command: string, pathToCheck: string, log = false) {
 		}
 	}
 
-	if (log) if (!commandIsExecutable) console.log(`${command}: not found`);
+	if (log) if (!commandIsExecutable) processOutput({ content: `${command}: not found`, isError: true });
 	return commandIsExecutable;
 }
