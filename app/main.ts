@@ -74,22 +74,19 @@ function processOutput({
 	if (!content) return;
 
 	const formattedContent = content.normalize().trim()
-	const processedWritePath = writePath.includes(path.sep) ? writePath : `${process.cwd()}${path.sep}${writePath}`;
 
-	if (shouldWrite && processedWritePath) {
+	if (shouldWrite && writePath) {
 		try {
-			const accessArray = processedWritePath.split(path.sep);
-			accessArray.pop();
-			fs.accessSync(accessArray.join(path.sep).trim());
-
-			let finalPath = processedWritePath;
-			if (!path.isAbsolute(finalPath)) {
-				finalPath = path.resolve(finalPath);
+			let processedWritePath = `${path.dirname(writePath)}${path.sep}${path.basename(writePath)}`;
+			if (!path.isAbsolute(processedWritePath)) {
+				processedWritePath = path.resolve(processedWritePath);
 			}
-			fs.writeFileSync(finalPath, formattedContent);
+			fs.accessSync(path.dirname(processedWritePath));
+			fs.writeFileSync(processedWritePath, formattedContent);
 		} catch (err) {
 			console.error(err);
 		}
+		return;
 	}
 	if (isError) {
 		console.error(formattedContent)
