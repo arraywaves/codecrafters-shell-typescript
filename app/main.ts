@@ -73,18 +73,26 @@ function processOutput({
 }) {
 	if (!content) return;
 
-	const formattedContent = content.normalize().trim()
+	const formattedContent = content.normalize();
 
 	if (shouldWrite && writePath) {
+		let processedWritePath = `${path.dirname(writePath)}${path.sep}${path.basename(writePath)}`;
+		if (!path.isAbsolute(processedWritePath)) {
+			processedWritePath = path.resolve(processedWritePath);
+		}
 		try {
-			let processedWritePath = `${path.dirname(writePath)}${path.sep}${path.basename(writePath)}`;
-			if (!path.isAbsolute(processedWritePath)) {
-				processedWritePath = path.resolve(processedWritePath);
-			}
 			fs.accessSync(path.dirname(processedWritePath));
+		} catch {
+			try {
+				fs.mkdirSync(path.dirname(processedWritePath))
+			} catch (err) {
+				console.error((err as Error).message);
+			}
+		}
+		try {
 			fs.writeFileSync(processedWritePath, formattedContent);
 		} catch (err) {
-			console.error(err);
+			console.error((err as Error).message);
 		}
 		return;
 	}
