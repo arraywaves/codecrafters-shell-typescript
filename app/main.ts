@@ -127,7 +127,7 @@ function processOutput({
 function handleExecutable(command: string, args: string[], outputArgs: string[] = []) {
 	try {
 		execFile(command, args, (err, stdout, stderr) => {
-			if (err) {
+			if (err && !stderr) {
 				processOutput({
 					content: (err as Error).message,
 					isError: true
