@@ -57,23 +57,25 @@ function processOutput({
 	isError = false,
 	shouldWrite = false,
 	writePath = "output.txt",
-	writeToStdout = false
+	consoleWrite = false
 }: {
 	content: string;
 	isError?: false;
 	shouldWrite: boolean | undefined;
 	writePath: string | undefined;
-	writeToStdout?: boolean;
+	consoleWrite?: boolean;
 } | {
 	content: string;
 	isError?: true;
 	shouldWrite?: never;
 	writePath?: never;
-	writeToStdout?: boolean;
+	consoleWrite?: boolean;
 }) {
 	if (!content) return;
-
-	const formattedContent = content.normalize();
+	const formattedContent = content.trim().normalize();
+	const finalContent = !shouldWrite && !formattedContent.endsWith('\n')
+		? `${formattedContent}\n`
+		: formattedContent;
 
 	if (shouldWrite && writePath) {
 		let processedWritePath = `${path.dirname(writePath)}${path.sep}${path.basename(writePath)}`;
@@ -84,26 +86,40 @@ function processOutput({
 			fs.accessSync(path.dirname(processedWritePath));
 		} catch {
 			try {
-				fs.mkdirSync(path.dirname(processedWritePath))
+				fs.mkdirSync(path.dirname(processedWritePath), { recursive: true })
 			} catch (err) {
-				console.error((err as Error).message);
+				processOutput({
+					content: formattedContent,
+					isError: true
+				})
 			}
 		}
 		try {
 			fs.writeFileSync(processedWritePath, formattedContent);
 		} catch (err) {
-			console.error((err as Error).message);
+			processOutput({
+				content: formattedContent,
+				isError: true
+			})
 		}
 		return;
 	}
 	if (isError) {
-		console.error(formattedContent)
-	} else {
-		if (writeToStdout) {
-			process.stdout.write(formattedContent);
-		} else {
-			console.log(formattedContent);
+		if (consoleWrite) {
+			console.error(finalContent);
+			return;
 		}
+		process.stderr.write(finalContent, (err) => {
+			if (err) console.error((err as Error).message);
+		});
+	} else {
+		if (consoleWrite) {
+			console.log(finalContent);
+			return;
+		}
+		process.stdout.write(finalContent, (err) => {
+			if (err) console.error((err as Error).message);
+		});
 	}
 }
 
@@ -111,30 +127,30 @@ function processOutput({
 function handleExecutable(command: string, args: string[], outputArgs: string[] = []) {
 	try {
 		execFile(command, args, (err, stdout, stderr) => {
-			if (err) {
-				processOutput({
-					content: `Error: ${err.message}`,
-					isError: true
-				})
-			}
 			if (stderr) {
 				processOutput({
 					content: stderr,
 					isError: true
 				})
-			}
-			if (stdout) {
+			} else if (err) {
+				processOutput({
+					content: `Error: ${err.message}`,
+					isError: true
+				})
+			} else if (stdout) {
 				processOutput({
 					content: stdout,
 					shouldWrite: outputArgs.length > 1,
-					writePath: outputArgs[1],
-					writeToStdout: true
+					writePath: outputArgs[1]
 				})
 			}
 			promptUser();
 		});
 	} catch (err) {
-		console.error(err);
+		processOutput({
+			content: (err as Error).message,
+			isError: true
+		})
 		promptUser();
 	}
 }
@@ -273,7 +289,7 @@ function handlePrintWorkingDir(outputArgs: string[] = []) {
 }
 function handleEcho(args: string[], outputArgs: string[] = []) {
 	processOutput({
-		content: `${args.join(" ").trim()}`,
+		content: `${args.join(" ")}`,
 		shouldWrite: outputArgs.length > 1,
 		writePath: outputArgs[1]
 	})
