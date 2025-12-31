@@ -214,22 +214,23 @@ function handleExecutable(command: string, args: string[], outputArgs: string[] 
 function handleShellCommands(command: ShellCommand, args: string[], outputArgs: string[] = []) {
 	if (isEscapeCommand(command)) {
 		rl.close();
+		process.exitCode = 0;
 		return;
 	}
 
 	switch (command) {
 		case "cd":
-			handleChangeDir(args[0], outputArgs, redirection);
+			handleChangeDir(args[0], outputArgs);
 			break;
 		case "echo":
-			handleEcho(args, outputArgs, redirection);
+			handleEcho(args, outputArgs);
 			break;
 		case "pwd":
-			handlePrintWorkingDir(outputArgs, redirection);
+			handlePrintWorkingDir(outputArgs);
 			break;
 		case "type":
 			const checkBuiltIn = args[0];
-			handleType(checkBuiltIn || "", outputArgs, redirection);
+			handleType(checkBuiltIn || "", outputArgs);
 			break;
 	}
 	promptUser();
@@ -380,7 +381,7 @@ function handleType(checkCommand: string, outputArgs: string[] = []) {
 	} else {
 		const pathVariable = process.env.PATH;
 		if (pathVariable && pathVariable !== "") {
-			isExecutable(checkCommand, pathVariable, true, outputArgs, redirection);
+			isExecutable(checkCommand, pathVariable, true, outputArgs);
 		} else {
 			processOutput({
 				content: `${checkCommand}: please set PATH`,
