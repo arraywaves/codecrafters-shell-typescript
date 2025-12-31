@@ -101,44 +101,57 @@ function processOutput({
 			case ">":
 			case "1>":
 			case ">>":
-				contentCheck = formattedContent;
+				contentCheck = finalContent;
 				break;
 			case "2>":
-				contentCheck = isError ? formattedContent : "";
+				contentCheck = isError ? finalContent : "";
 				break;
 			default:
-				contentCheck = formattedContent;
+				contentCheck = finalContent;
 				break;
 		}
 
-		let processedWritePath = `${path.dirname(writePath)}${path.sep}${path.basename(writePath)}`;
-		if (!path.isAbsolute(processedWritePath)) {
-			processedWritePath = path.resolve(processedWritePath);
-		}
+		let processedWritePath = path.resolve(
+			path.dirname(writePath),
+			path.basename(writePath)
+		);
+
 		try {
-			fs.accessSync(path.dirname(processedWritePath));
-		} catch {
-			try {
-				fs.mkdirSync(path.dirname(processedWritePath), { recursive: true })
-			} catch (err) {
-				processOutput({
-					content: (err as Error).message,
-					isError: true
-				})
-			}
-		}
-		try {
-			fs.writeFileSync(processedWritePath, contentCheck);
-			if (redirection === "2>" && contentCheck.length < 1) {
-				processOutput({
-					content: formattedContent
-				})
-			}
+			fs.mkdirSync(path.dirname(processedWritePath), { recursive: true });
 		} catch (err) {
 			processOutput({
 				content: (err as Error).message,
 				isError: true
 			})
+			return;
+		}
+
+		const writeMode = redirection === ">>" ? 'a' : 'w';
+		try {
+			const writeStream = fs.createWriteStream(processedWritePath, {
+				flags: writeMode
+			});
+			writeStream.write(contentCheck, (err) => {
+				if (err) {
+					processOutput({
+						content: (err as Error).message,
+						isError: true
+					});
+				}
+				writeStream.end();
+			});
+			writeStream.on('error', (err) => {
+				processOutput({
+					content: (err as Error).message,
+					isError: true
+				});
+			});
+		} catch (err) {
+			processOutput({
+				content: (err as Error).message,
+				isError: true
+			})
+			return;
 		}
 		return;
 	}
@@ -302,15 +315,9 @@ function handleFormatting(answer: string) {
 
 // Built-in Commands
 function handleChangeDir(dir: string, outputArgs: string[] = []) {
-	let finalPath = dir;
-
-	if (!path.isAbsolute(finalPath)) {
-		finalPath = path.resolve(finalPath);
-	}
-
 	try {
-		fs.accessSync(finalPath);
-		process.chdir(fs.realpathSync(finalPath));
+		fs.accessSync(path.resolve(dir));
+		process.chdir(fs.realpathSync(path.resolve(dir)));
 	} catch (err) {
 		processOutput({
 			content: (err as Error).message,
