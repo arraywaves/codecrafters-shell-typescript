@@ -23,24 +23,43 @@ function promptUser() {
 function processUserInput(answer: string) {
 	const [root, ...args] = handleFormatting(answer);
 	let outputArgs: string[] = [];
+	let redirection = "-1";
 
 	if (isToWrite(args)) {
-		const unixStderr = args.indexOf("2>") === -1 ? 0 : args.indexOf("2>");
-		const unixStdout = args.indexOf("1>") === -1 ? 0 : args.indexOf("1>");
-		outputArgs = args.splice(unixStderr || unixStdout || args.indexOf(">"), 2);
+		const appendStdout = args.indexOf(">>") === -1 ? 0 : args.indexOf(">>");
+		const stderr = args.indexOf("2>") === -1 ? 0 : args.indexOf("2>");
+		const stdout = args.indexOf("1>") === -1 ? 0 : args.indexOf("1>");
+		const redirectIndex = appendStdout || stderr || stdout || args.indexOf(">") || -1;
+
+		switch (args[redirectIndex]) {
+			case ">>":
+				redirection = ">>";
+				break;
+			case "2>":
+				redirection = "2>";
+				break;
+			case "1>":
+			case ">":
+				redirection = "1>";
+				break;
+			default:
+				redirection = "0";
+				break;
+		}
+		outputArgs = args.splice(redirectIndex, 2);
 	}
 	if (isShellCommand(root)) {
-		handleShellCommands(root, args, outputArgs);
+		handleShellCommands(root, args, outputArgs, redirection);
 		return;
 	}
 	if (isExecutable(root, process.env.PATH || "")) {
-		handleExecutable(root, args, outputArgs);
+		handleExecutable(root, args, outputArgs, redirection);
 		return;
 	} else if (root && args.length > 0) {
 		processOutput({
 			content: `${root}: ${args[0]} not found`,
 			isError: true,
-			shouldWrite: outputArgs.length > 1,
+			shouldWrite: outputArgs.length > 1 && redirection === "2>",
 			writePath: outputArgs[1]
 		})
 		promptUser();
@@ -51,7 +70,7 @@ function processUserInput(answer: string) {
 		processOutput({
 			content: `${answer}: command not found`,
 			isError: true,
-			shouldWrite: outputArgs.length > 1,
+			shouldWrite: outputArgs.length > 1 && redirection === "2>",
 			writePath: outputArgs[1]
 		})
 	}
@@ -113,14 +132,14 @@ function processOutput({
 }
 
 // Top Level
-function handleExecutable(command: string, args: string[], outputArgs: string[] = []) {
+function handleExecutable(command: string, args: string[], outputArgs: string[] = [], redirection?: string) {
 	try {
 		execFile(command, args, (err, stdout, stderr) => {
 			if (err && !stderr) {
 				processOutput({
 					content: (err as Error).message,
 					isError: true,
-					shouldWrite: outputArgs.length > 1,
+					shouldWrite: outputArgs.length > 1 && redirection === "2>",
 					writePath: outputArgs[1]
 				})
 			}
@@ -128,14 +147,14 @@ function handleExecutable(command: string, args: string[], outputArgs: string[] 
 				processOutput({
 					content: stderr,
 					isError: true,
-					shouldWrite: outputArgs.length > 1,
+					shouldWrite: outputArgs.length > 1 && redirection === "2>",
 					writePath: outputArgs[1]
 				})
 			}
 			if (stdout) {
 				processOutput({
 					content: stdout,
-					shouldWrite: outputArgs.length > 1,
+					shouldWrite: outputArgs.length > 1 && redirection !== "2>",
 					writePath: outputArgs[1]
 				})
 			}
@@ -144,12 +163,14 @@ function handleExecutable(command: string, args: string[], outputArgs: string[] 
 	} catch (err) {
 		processOutput({
 			content: (err as Error).message,
-			isError: true
+			isError: true,
+			shouldWrite: outputArgs.length > 1 && redirection === "2>",
+			writePath: outputArgs[1]
 		})
 		promptUser();
 	}
 }
-function handleShellCommands(command: ShellCommand, args: string[], outputArgs: string[] = []) {
+function handleShellCommands(command: ShellCommand, args: string[], outputArgs: string[] = [], redirection?: string) {
 	if (isEscapeCommand(command)) {
 		rl.close();
 		return;
@@ -157,17 +178,17 @@ function handleShellCommands(command: ShellCommand, args: string[], outputArgs: 
 
 	switch (command) {
 		case "cd":
-			handleChangeDir(args[0], outputArgs);
+			handleChangeDir(args[0], outputArgs, redirection);
 			break;
 		case "echo":
-			handleEcho(args, outputArgs);
+			handleEcho(args, outputArgs, redirection);
 			break;
 		case "pwd":
-			handlePrintWorkingDir(outputArgs);
+			handlePrintWorkingDir(outputArgs, redirection);
 			break;
 		case "type":
 			const checkBuiltIn = args[0];
-			handleType(checkBuiltIn || "", outputArgs);
+			handleType(checkBuiltIn || "", outputArgs, redirection);
 			break;
 	}
 	promptUser();
@@ -258,7 +279,7 @@ function handleFormatting(answer: string) {
 }
 
 // Built-in Commands
-function handleChangeDir(dir: string, outputArgs: string[] = []) {
+function handleChangeDir(dir: string, outputArgs: string[] = [], redirection?: string) {
 	let finalPath = dir;
 
 	if (!path.isAbsolute(finalPath)) {
@@ -272,48 +293,64 @@ function handleChangeDir(dir: string, outputArgs: string[] = []) {
 		processOutput({
 			content: (err as Error).message,
 			isError: true,
-			shouldWrite: outputArgs.length > 1,
+			shouldWrite: outputArgs.length > 1 && redirection === "2>",
 			writePath: outputArgs[1]
 		})
 	}
 }
-function handlePrintWorkingDir(outputArgs: string[] = []) {
-	processOutput({
-		content: process.cwd(),
-		shouldWrite: outputArgs.length > 1,
-		writePath: outputArgs[1]
-	})
+function handlePrintWorkingDir(outputArgs: string[] = [], redirection?: string) {
+	try {
+		processOutput({
+			content: process.cwd(),
+			shouldWrite: outputArgs.length > 1 && redirection !== "2>",
+			writePath: outputArgs[1]
+		})
+	} catch (err) {
+		processOutput({
+			content: (err as Error).message,
+			shouldWrite: outputArgs.length > 1 && redirection === "2>",
+			writePath: outputArgs[1]
+		})
+	}
 }
-function handleEcho(args: string[], outputArgs: string[] = []) {
-	processOutput({
-		content: `${args.join(" ")}`,
-		shouldWrite: outputArgs.length > 1,
-		writePath: outputArgs[1]
-	})
+function handleEcho(args: string[], outputArgs: string[] = [], redirection?: string) {
+	try {
+		processOutput({
+			content: `${args.join(" ")}`,
+			shouldWrite: outputArgs.length > 1 && redirection !== "2>",
+			writePath: outputArgs[1]
+		})
+	} catch (err) {
+		processOutput({
+			content: (err as Error).message,
+			shouldWrite: outputArgs.length > 1 && redirection === "2>",
+			writePath: outputArgs[1]
+		})
+	}
 }
-function handleType(checkCommand: string, outputArgs: string[] = []) {
+function handleType(checkCommand: string, outputArgs: string[] = [], redirection?: string) {
 	if (checkCommand === "") {
 		processOutput({
 			content: "type: please include an argument",
 			isError: true,
-			shouldWrite: outputArgs.length > 1,
+			shouldWrite: outputArgs.length > 1 && redirection === "2>",
 			writePath: outputArgs[1]
 		})
 	} else if (isShellCommand(checkCommand)) {
 		processOutput({
 			content: `${checkCommand} is a shell builtin`,
-			shouldWrite: outputArgs.length > 1,
+			shouldWrite: outputArgs.length > 1 && redirection !== "2>",
 			writePath: outputArgs[1]
 		})
 	} else {
 		const pathVariable = process.env.PATH;
 		if (pathVariable && pathVariable !== "") {
-			isExecutable(checkCommand, pathVariable, true, outputArgs);
+			isExecutable(checkCommand, pathVariable, true, outputArgs, redirection);
 		} else {
 			processOutput({
 				content: `${checkCommand}: please set PATH`,
 				isError: true,
-				shouldWrite: outputArgs.length > 1,
+				shouldWrite: outputArgs.length > 1 && redirection === "2>",
 				writePath: outputArgs[1]
 			})
 		}
@@ -322,7 +359,7 @@ function handleType(checkCommand: string, outputArgs: string[] = []) {
 
 // Helpers
 function isToWrite(args: string[]): boolean {
-	return args.includes(">") || args.includes("1>") || args.includes("2>");
+	return args.includes(">") || args.includes("1>") || args.includes("2>") || args.includes(">>");
 }
 function isShellCommand(command: string): command is ShellCommand {
 	return isEscapeCommand(command) || isShellBuiltInCommand(command);
@@ -333,7 +370,7 @@ function isEscapeCommand(command: string): command is typeof shellCommands.escap
 function isShellBuiltInCommand(command: string): command is typeof shellCommands.builtin[number] {
 	return shellCommands.builtin.includes(command as any);
 }
-function isExecutable(command: string, pathToCheck: string, log = false, outputArgs: string[] = []) {
+function isExecutable(command: string, pathToCheck: string, log = false, outputArgs: string[] = [], redirection?: string) {
 	let commandIsExecutable = false;
 	let directories = pathToCheck.split(path.delimiter);
 
@@ -346,7 +383,11 @@ function isExecutable(command: string, pathToCheck: string, log = false, outputA
 
 			try {
 				fs.accessSync(fullPath, fs.constants.X_OK);
-				if (log) processOutput({ content: `${command} is ${fullPath}`, shouldWrite: outputArgs.length > 1, writePath: outputArgs[1] });
+				if (log) processOutput({
+					content: `${command} is ${fullPath}`,
+					shouldWrite: outputArgs.length > 1 && redirection !== "2>",
+					writePath: outputArgs[1]
+				});
 				commandIsExecutable = true;
 				break;
 			} catch (err) {
@@ -355,6 +396,11 @@ function isExecutable(command: string, pathToCheck: string, log = false, outputA
 		}
 	}
 
-	if (log) if (!commandIsExecutable) processOutput({ content: `${command}: not found`, isError: true });
+	if (log) if (!commandIsExecutable) processOutput({
+		content: `${command}: not found`,
+		isError: true,
+		shouldWrite: outputArgs.length > 1 && redirection === "2>",
+		writePath: outputArgs[1]
+	});
 	return commandIsExecutable;
 }
