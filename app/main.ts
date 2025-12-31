@@ -93,12 +93,6 @@ function processOutput({
 		}
 		try {
 			fs.writeFileSync(processedWritePath, formattedContent);
-			if (isError) {
-				processOutput({
-					content: formattedContent,
-					isError: true
-				})
-			}
 		} catch (err) {
 			processOutput({
 				content: formattedContent,
