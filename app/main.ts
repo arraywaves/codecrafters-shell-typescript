@@ -101,7 +101,7 @@ function processOutput({
 			case ">":
 			case "1>":
 				contentCheck = isError ? "" : final;
-				if (isError) processOutput({ content: content });
+				if (isError) processOutput({ content: content, isError: true });
 				break;
 			case "2>":
 				contentCheck = isError ? final : "";
@@ -109,11 +109,11 @@ function processOutput({
 				break;
 			case ">>":
 				contentCheck = final;
-				if (isError) processOutput({ content: content });
+				if (isError) processOutput({ content: content, isError: true });
 				break;
 			default:
 				contentCheck = final;
-				if (isError) processOutput({ content: content });
+				if (isError) processOutput({ content: content, isError: true });
 				break;
 		}
 
