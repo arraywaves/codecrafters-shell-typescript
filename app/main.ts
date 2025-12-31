@@ -91,7 +91,7 @@ function processOutput({
 	if (!content) return;
 
 	const formattedContent = content?.trim().normalize();
-	const newlineContent = !formattedContent?.endsWith('\n')
+	const final = !formattedContent?.endsWith('\n')
 		? `${formattedContent}\n`
 		: formattedContent;
 
@@ -100,19 +100,19 @@ function processOutput({
 		switch (redirection) {
 			case ">":
 			case "1>":
-				contentCheck = newlineContent;
+				contentCheck = isError ? "" : final;
 				if (isError) processOutput({ content: content });
 				break;
 			case "2>":
-				contentCheck = isError ? newlineContent : "";
+				contentCheck = isError ? final : "";
 				if (!isError) processOutput({ content: content });
 				break;
 			case ">>":
-				contentCheck = newlineContent;
+				contentCheck = final;
 				if (isError) processOutput({ content: content });
 				break;
 			default:
-				contentCheck = newlineContent;
+				contentCheck = final;
 				if (isError) processOutput({ content: content });
 				break;
 		}
@@ -160,12 +160,12 @@ function processOutput({
 		return;
 	}
 	if (isError) {
-		process.stderr.write(newlineContent, (err) => {
+		process.stderr.write(final, (err) => {
 			if (err) console.error((err as Error).message);
 			process.exitCode = 1;
 		});
 	} else {
-		process.stdout.write(newlineContent, (err) => {
+		process.stdout.write(final, (err) => {
 			if (err) console.error((err as Error).message);
 			process.exitCode = 0;
 		});
