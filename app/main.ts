@@ -8,13 +8,16 @@ const rl = createInterface({
 	input: process.stdin,
 	output: process.stdout,
 });
+
 const shellCommands = {
 	escape: ["exit", "quit", "q", "escape", "esc"],
 	builtin: ["echo", "type", "pwd", "cd"]
 } as const;
 type ShellCommand = typeof shellCommands.escape[number] | typeof shellCommands.builtin[number];
-type Redirection = ">>" | "2>" | "1>" | ">" | null
-let redirection: Redirection = null;
+
+const redirectionOptions = ["2>", "2>>", "1>", "1>>", ">", ">>"] as const;
+type Redirection = typeof redirectionOptions[number];
+let redirection: Redirection | undefined = undefined;
 
 promptUser();
 
@@ -24,30 +27,15 @@ function promptUser() {
 }
 function processUserInput(answer: string) {
 	const [root, ...args] = handleFormatting(answer);
+	const redirect = findFirstCommonElementInArray(args, redirectionOptions);
 	let outputArgs: string[] = [];
 
-	if (isToWrite(args)) {
-		const appendStdout = args.indexOf(">>") === -1 ? 0 : args.indexOf(">>");
-		const stderr = args.indexOf("2>") === -1 ? 0 : args.indexOf("2>");
-		const stdout = args.indexOf("1>") === -1 ? 0 : args.indexOf("1>");
-		const redirectIndex = appendStdout || stderr || stdout || args.indexOf(">");
 
-		switch (args[redirectIndex]) {
-			case ">>":
-				redirection = ">>";
-				break;
-			case "2>":
-				redirection = "2>";
-				break;
-			case "1>":
-			case ">":
-				redirection = "1>";
-				break;
-			default:
-				redirection = null;
-				break;
-		}
+	if (redirect && isRedirect(redirect)) {
+		const redirectIndex = args.indexOf(redirect);
+
 		outputArgs = args.splice(redirectIndex, 2);
+		redirection = redirect;
 	}
 	if (isShellCommand(root)) {
 		handleShellCommands(root, args, outputArgs);
@@ -99,17 +87,16 @@ function processOutput({
 		let contentCheck: string;
 		switch (redirection) {
 			case ">":
+			case ">>":
 			case "1>":
+			case "1>>":
 				contentCheck = isError ? "" : final;
 				if (isError) processOutput({ content: content, isError: true });
 				break;
 			case "2>":
+			case "2>>":
 				contentCheck = isError ? final : "";
 				if (!isError) processOutput({ content: content });
-				break;
-			case ">>":
-				contentCheck = final;
-				if (isError) processOutput({ content: content, isError: true });
 				break;
 			default:
 				contentCheck = final;
@@ -130,7 +117,7 @@ function processOutput({
 			})
 			return;
 		}
-		const writeMode = redirection === ">>" ? 'a' : 'w';
+		const writeMode = redirection?.includes(">>") ? 'a' : 'w';
 		try {
 			const writeStream = fs.createWriteStream(processedWritePath, {
 				flags: writeMode
@@ -394,8 +381,8 @@ function handleType(checkCommand: string, outputArgs: string[] = []) {
 }
 
 // Helpers
-function isToWrite(args: string[]): boolean {
-	return args.includes(">") || args.includes("1>") || args.includes("2>") || args.includes(">>");
+function isRedirect(redirect: string): redirect is Redirection {
+	return redirectionOptions.includes(redirect as any);
 }
 function isShellCommand(command: string): command is ShellCommand {
 	return isEscapeCommand(command) || isShellBuiltInCommand(command);
@@ -439,4 +426,9 @@ function isExecutable(command: string, pathToCheck: string, log = false, outputA
 		writePath: outputArgs[1]
 	});
 	return commandIsExecutable;
+}
+function findFirstCommonElementInArray<T>(searchArray: unknown[], elementArray: readonly T[]): T | undefined {
+	return searchArray.find(
+		(element): element is T => elementArray.includes(element as T)
+	) as T | undefined;
 }
