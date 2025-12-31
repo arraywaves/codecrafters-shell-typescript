@@ -91,7 +91,7 @@ function processOutput({
 	if (!content) return;
 
 	const formattedContent = content?.trim().normalize();
-	const finalContent = !shouldWrite && !formattedContent?.endsWith('\n')
+	const newlineContent = !formattedContent?.endsWith('\n')
 		? `${formattedContent}\n`
 		: formattedContent;
 
@@ -100,28 +100,27 @@ function processOutput({
 		switch (redirection) {
 			case ">":
 			case "1>":
-				contentCheck = formattedContent;
+				contentCheck = newlineContent;
 				if (isError) processOutput({ content: content });
 				break;
 			case "2>":
-				contentCheck = isError ? formattedContent : "";
+				contentCheck = isError ? newlineContent : "";
 				if (!isError) processOutput({ content: content });
 				break;
 			case ">>":
-				contentCheck = finalContent;
+				contentCheck = newlineContent;
 				if (isError) processOutput({ content: content });
 				break;
 			default:
-				contentCheck = formattedContent;
+				contentCheck = newlineContent;
 				if (isError) processOutput({ content: content });
 				break;
 		}
 
-		let processedWritePath = path.resolve(
+		const processedWritePath = path.resolve(
 			path.dirname(writePath),
 			path.basename(writePath)
 		);
-
 		try {
 			fs.mkdirSync(path.dirname(processedWritePath), { recursive: true });
 		} catch (err) {
@@ -131,7 +130,6 @@ function processOutput({
 			})
 			return;
 		}
-
 		const writeMode = redirection === ">>" ? 'a' : 'w';
 		try {
 			const writeStream = fs.createWriteStream(processedWritePath, {
@@ -162,12 +160,12 @@ function processOutput({
 		return;
 	}
 	if (isError) {
-		process.stderr.write(finalContent, (err) => {
+		process.stderr.write(newlineContent, (err) => {
 			if (err) console.error((err as Error).message);
 			process.exitCode = 1;
 		});
 	} else {
-		process.stdout.write(finalContent, (err) => {
+		process.stdout.write(newlineContent, (err) => {
 			if (err) console.error((err as Error).message);
 			process.exitCode = 0;
 		});
