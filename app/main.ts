@@ -25,8 +25,9 @@ function processUserInput(answer: string) {
 	let outputArgs: string[] = [];
 
 	if (isToWrite(args)) {
+		const unixStderr = args.indexOf("2>") === -1 ? 0 : args.indexOf("2>");
 		const unixStdout = args.indexOf("1>") === -1 ? 0 : args.indexOf("1>");
-		outputArgs = args.splice(unixStdout || args.indexOf(">"), 2);
+		outputArgs = args.splice(unixStderr || unixStdout || args.indexOf(">"), 2);
 	}
 	if (isShellCommand(root)) {
 		handleShellCommands(root, args, outputArgs);
@@ -38,7 +39,9 @@ function processUserInput(answer: string) {
 	} else if (root && args.length > 0) {
 		processOutput({
 			content: `${root}: ${args[0]} not found`,
-			isError: true
+			isError: true,
+			shouldWrite: outputArgs.length > 1,
+			writePath: outputArgs[1]
 		})
 		promptUser();
 		return;
@@ -47,7 +50,9 @@ function processUserInput(answer: string) {
 	if (root) {
 		processOutput({
 			content: `${answer}: command not found`,
-			isError: true
+			isError: true,
+			shouldWrite: outputArgs.length > 1,
+			writePath: outputArgs[1]
 		})
 	}
 	promptUser();
@@ -57,19 +62,11 @@ function processOutput({
 	isError = false,
 	shouldWrite = false,
 	writePath = "output.txt",
-	consoleWrite = false
 }: {
 	content: string;
-	isError?: false;
-	shouldWrite: boolean | undefined;
-	writePath: string | undefined;
-	consoleWrite?: boolean;
-} | {
-	content: string;
-	isError?: true;
-	shouldWrite?: never;
-	writePath?: never;
-	consoleWrite?: boolean;
+	isError?: boolean;
+	shouldWrite?: boolean | undefined;
+	writePath?: string | undefined;
 }) {
 	if (!content) return;
 	const formattedContent = content.trim().normalize();
@@ -96,6 +93,12 @@ function processOutput({
 		}
 		try {
 			fs.writeFileSync(processedWritePath, formattedContent);
+			if (isError) {
+				processOutput({
+					content: formattedContent,
+					isError: true
+				})
+			}
 		} catch (err) {
 			processOutput({
 				content: formattedContent,
@@ -105,18 +108,10 @@ function processOutput({
 		return;
 	}
 	if (isError) {
-		if (consoleWrite) {
-			console.error(finalContent);
-			return;
-		}
 		process.stderr.write(finalContent, (err) => {
 			if (err) console.error((err as Error).message);
 		});
 	} else {
-		if (consoleWrite) {
-			console.log(finalContent);
-			return;
-		}
 		process.stdout.write(finalContent, (err) => {
 			if (err) console.error((err as Error).message);
 		});
@@ -130,13 +125,17 @@ function handleExecutable(command: string, args: string[], outputArgs: string[] 
 			if (err && !stderr) {
 				processOutput({
 					content: (err as Error).message,
-					isError: true
+					isError: true,
+					shouldWrite: outputArgs.length > 1,
+					writePath: outputArgs[1]
 				})
 			}
 			if (stderr) {
 				processOutput({
 					content: stderr,
-					isError: true
+					isError: true,
+					shouldWrite: outputArgs.length > 1,
+					writePath: outputArgs[1]
 				})
 			}
 			if (stdout) {
@@ -164,7 +163,7 @@ function handleShellCommands(command: ShellCommand, args: string[], outputArgs: 
 
 	switch (command) {
 		case "cd":
-			handleChangeDir(args[0]);
+			handleChangeDir(args[0], outputArgs);
 			break;
 		case "echo":
 			handleEcho(args, outputArgs);
@@ -265,7 +264,7 @@ function handleFormatting(answer: string) {
 }
 
 // Built-in Commands
-function handleChangeDir(dir: string) {
+function handleChangeDir(dir: string, outputArgs: string[] = []) {
 	let finalPath = dir;
 
 	if (!path.isAbsolute(finalPath)) {
@@ -275,10 +274,12 @@ function handleChangeDir(dir: string) {
 	try {
 		fs.accessSync(finalPath);
 		process.chdir(fs.realpathSync(finalPath));
-	} catch (_err) {
+	} catch (err) {
 		processOutput({
-			content: `cd: ${dir}: No such file or directory`,
-			isError: true
+			content: (err as Error).message,
+			isError: true,
+			shouldWrite: outputArgs.length > 1,
+			writePath: outputArgs[1]
 		})
 	}
 }
@@ -300,7 +301,9 @@ function handleType(checkCommand: string, outputArgs: string[] = []) {
 	if (checkCommand === "") {
 		processOutput({
 			content: "type: please include an argument",
-			isError: true
+			isError: true,
+			shouldWrite: outputArgs.length > 1,
+			writePath: outputArgs[1]
 		})
 	} else if (isShellCommand(checkCommand)) {
 		processOutput({
@@ -315,7 +318,9 @@ function handleType(checkCommand: string, outputArgs: string[] = []) {
 		} else {
 			processOutput({
 				content: `${checkCommand}: please set PATH`,
-				isError: true
+				isError: true,
+				shouldWrite: outputArgs.length > 1,
+				writePath: outputArgs[1]
 			})
 		}
 	}
@@ -323,7 +328,7 @@ function handleType(checkCommand: string, outputArgs: string[] = []) {
 
 // Helpers
 function isToWrite(args: string[]): boolean {
-	return args.includes(">") || args.includes("1>");
+	return args.includes(">") || args.includes("1>") || args.includes("2>");
 }
 function isShellCommand(command: string): command is ShellCommand {
 	return isEscapeCommand(command) || isShellBuiltInCommand(command);
