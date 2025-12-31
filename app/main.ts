@@ -326,7 +326,7 @@ function handleChangeDir(dir: string, outputArgs: string[] = []) {
 		process.chdir(fs.realpathSync(path.resolve(dir)));
 	} catch (err) {
 		processOutput({
-			content: (err as Error).message,
+			content: `cd: ${path.resolve(dir)}: No such file or directory`,
 			isError: true,
 			shouldWrite: outputArgs.length > 1,
 			writePath: outputArgs[1]
