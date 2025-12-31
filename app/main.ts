@@ -100,15 +100,20 @@ function processOutput({
 		switch (redirection) {
 			case ">":
 			case "1>":
-			case ">>":
 				contentCheck = formattedContent;
+				if (isError) processOutput({ content: content });
 				break;
 			case "2>":
 				contentCheck = isError ? formattedContent : "";
 				if (!isError) processOutput({ content: content });
 				break;
+			case ">>":
+				contentCheck = finalContent;
+				if (isError) processOutput({ content: content });
+				break;
 			default:
 				contentCheck = formattedContent;
+				if (isError) processOutput({ content: content });
 				break;
 		}
 
@@ -159,10 +164,12 @@ function processOutput({
 	if (isError) {
 		process.stderr.write(finalContent, (err) => {
 			if (err) console.error((err as Error).message);
+			process.exitCode = 1;
 		});
 	} else {
 		process.stdout.write(finalContent, (err) => {
 			if (err) console.error((err as Error).message);
+			process.exitCode = 0;
 		});
 	}
 }
