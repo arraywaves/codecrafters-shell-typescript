@@ -101,13 +101,13 @@ function processOutput({
 			case ">":
 			case "1>":
 			case ">>":
-				contentCheck = finalContent;
+				contentCheck = formattedContent;
 				break;
 			case "2>":
-				contentCheck = isError ? finalContent : "";
+				contentCheck = isError ? formattedContent : "";
 				break;
 			default:
-				contentCheck = finalContent;
+				contentCheck = formattedContent;
 				break;
 		}
 
@@ -146,6 +146,7 @@ function processOutput({
 					isError: true
 				});
 			});
+			if (!isError) processOutput({ content: content });
 		} catch (err) {
 			processOutput({
 				content: (err as Error).message,
