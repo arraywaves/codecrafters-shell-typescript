@@ -2,7 +2,7 @@ import { createInterface } from "readline";
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { execFile } from "child_process";
+import { exec, execFile } from "child_process";
 
 const rl = createInterface({
 	input: process.stdin,
@@ -19,9 +19,17 @@ const rl = createInterface({
 			match => match + " "
 		) : matches;
 
-		if (!processedMatches) {
-			process.stderr.write("\x07");
-			return line.trim();
+		if (processedMatches.length === 0) {
+			switch (process.platform) {
+				case "win32":
+					exec("powershell.exe [console]::beep(500,600)");
+					break;
+				case "darwin":
+					exec("afplay /System/Library/Sounds/Glass.aiff");
+					break;
+				default:
+					process.stderr.write('\x07');
+			}
 		}
 
 		return [processedMatches, line.trim()];
