@@ -19,6 +19,11 @@ const rl = createInterface({
 			match => match + " "
 		) : matches;
 
+		if (!processedMatches) {
+			process.stderr.write("\x07");
+			return line.trim();
+		}
+
 		return [processedMatches, line.trim()];
 	}
 });
