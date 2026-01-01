@@ -9,6 +9,8 @@
 		"@types/bun": "latest"
 	},
 	"dependencies": {
-		"@types/node": "^25.0.3"
+		"@types/lodash": "^4.17.21",
+		"@types/node": "^25.0.3",
+		"lodash": "^4.17.21"
 	}
 }

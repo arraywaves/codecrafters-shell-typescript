@@ -7,11 +7,25 @@ import { execFile } from "child_process";
 const rl = createInterface({
 	input: process.stdin,
 	output: process.stdout,
+	// prompt: `${process.cwd().split(path.sep)[process.cwd().split(path.sep).length - 1]} → `
+	completer: (line: string) => {
+		const matches = [
+			...shellCommands.escape,
+			...shellCommands.builtin
+		].filter(
+			cmd => cmd.startsWith(line.trim())
+		);
+		const processedMatches = matches.length === 1 ? matches.map(
+			match => match + " "
+		) : matches;
+
+		return [processedMatches, line.trim()];
+	}
 });
 
 const shellCommands = {
 	escape: ["exit", "quit", "q", "escape", "esc"],
-	builtin: ["echo", "type", "pwd", "cd"]
+	builtin: ["echo", "type", "pwd", "cd"],
 } as const;
 type ShellCommand = typeof shellCommands.escape[number] | typeof shellCommands.builtin[number];
 
@@ -19,17 +33,17 @@ const redirectionOptions = ["2>", "2>>", "1>", "1>>", ">", ">>"] as const;
 type Redirection = typeof redirectionOptions[number];
 let redirection: Redirection | undefined = undefined;
 
+process.title = `bombshell: ${process.cwd()}`;
 promptUser();
 
 function promptUser() {
-	rl.question("$ ", processUserInput);
-	// TODO: preferred prompt: rl.question(`${process.cwd().split(path.sep)[process.cwd().split(path.sep).length - 1]} → `, processUserInput);
+	rl.question("$ ", processInput);
 }
-function processUserInput(answer: string) {
-	const [root, ...args] = handleFormatting(answer);
-	const redirect = findFirstCommonElementInArray(args, redirectionOptions);
-	let outputArgs: string[] = [];
 
+function processInput(line: string) {
+	const [root, ...args] = handleFormatting(line);
+	const redirect = getFirstCommonElementInArray(args, redirectionOptions);
+	let outputArgs: string[] = [];
 
 	if (redirect && isRedirect(redirect)) {
 		const redirectIndex = args.indexOf(redirect);
@@ -57,7 +71,7 @@ function processUserInput(answer: string) {
 
 	if (root) {
 		processOutput({
-			content: `${answer}: command not found`,
+			content: `${line}: command not found`,
 			isError: true,
 			shouldWrite: outputArgs.length > 1,
 			writePath: outputArgs[1]
@@ -201,8 +215,7 @@ function handleExecutable(command: string, args: string[], outputArgs: string[] 
 function handleShellCommands(command: ShellCommand, args: string[], outputArgs: string[] = []) {
 	if (isEscapeCommand(command)) {
 		rl.close();
-		process.exitCode = 0;
-		return;
+		process.exit(0);
 	}
 
 	switch (command) {
@@ -222,8 +235,8 @@ function handleShellCommands(command: ShellCommand, args: string[], outputArgs: 
 	}
 	promptUser();
 }
-function handleFormatting(answer: string) {
-	const formattedAnswer = answer.normalize("NFC");
+function handleFormatting(line: string) {
+	const formattedLine = line.normalize("NFC");
 	const tokens: string[] = [];
 	const delimiters = ["\ ", "\t"];
 
@@ -236,7 +249,7 @@ function handleFormatting(answer: string) {
 		currentToken += char;
 	}
 
-	for (const char of formattedAnswer) {
+	for (const char of formattedLine) {
 		if (escape) {
 			if (inDoubleQuotes) {
 				if (["\"", "\\", "$", "`"].includes(char)) {
@@ -427,7 +440,9 @@ function isExecutable(command: string, pathToCheck: string, log = false, outputA
 	});
 	return commandIsExecutable;
 }
-function findFirstCommonElementInArray<T>(searchArray: unknown[], elementArray: readonly T[]): T | undefined {
+
+// Utils
+function getFirstCommonElementInArray<T>(searchArray: unknown[], elementArray: readonly T[]): T | undefined {
 	return searchArray.find(
 		(element): element is T => elementArray.includes(element as T)
 	) as T | undefined;
