@@ -4,35 +4,15 @@ import * as os from 'os';
 import * as path from 'path';
 import { exec, execFile } from "child_process";
 
+
+
 const rl = createInterface({
 	input: process.stdin,
 	output: process.stdout,
 	// prompt: `${process.cwd().split(path.sep)[process.cwd().split(path.sep).length - 1]} → `
 	completer: (line: string) => {
-		const matches = [
-			...shellCommands.escape,
-			...shellCommands.builtin
-		].filter(
-			cmd => cmd.startsWith(line.trim())
-		);
-		const processedMatches = matches.length === 1 ? matches.map(
-			match => match + " "
-		) : matches;
-
-		if (processedMatches.length === 0) {
-			switch (process.platform) {
-				case "win32":
-					exec("powershell.exe [console]::beep(500,600)");
-					break;
-				case "darwin":
-					exec("afplay /System/Library/Sounds/Glass.aiff");
-					break;
-				default:
-					process.stderr.write('\x07');
-			}
-		}
-
-		return [processedMatches, line.trim()];
+		const completion = handleTabCompletion(line, tabCompletionOptions);
+		return completion;
 	}
 });
 
@@ -46,13 +26,11 @@ const redirectionOptions = ["2>", "2>>", "1>", "1>>", ">", ">>"] as const;
 type Redirection = typeof redirectionOptions[number];
 let redirection: Redirection | undefined = undefined;
 
-process.title = `bombshell: ${process.cwd()}`;
-promptUser();
+const tabCompletionOptions: string[] = [...shellCommands.escape, ...shellCommands.builtin];
 
 function promptUser() {
 	rl.question("$ ", processInput);
 }
-
 function processInput(line: string) {
 	const [root, ...args] = handleFormatting(line);
 	const redirect = getFirstCommonElementInArray(args, redirectionOptions);
@@ -187,6 +165,29 @@ function processOutput({
 }
 
 // Top Level
+function handleTabCompletion(line: string, selection: string[]) {
+	const matches = selection.filter(
+		cmd => cmd.startsWith(line.trim())
+	);
+	const processedMatches = matches.length === 1 ? matches.map(
+		match => match + " "
+	) : matches;
+
+	if (processedMatches.length === 0) {
+		switch (process.platform) {
+			case "win32":
+				exec("powershell.exe [console]::beep(500,600)");
+				break;
+			case "darwin":
+				exec("afplay /System/Library/Sounds/Glass.aiff");
+				break;
+			default:
+				process.stderr.write('\x07');
+		}
+	}
+
+	return [processedMatches, line.trim()];
+}
 function handleExecutable(command: string, args: string[], outputArgs: string[] = []) {
 	try {
 		execFile(command, args, (err, stdout, stderr) => {
@@ -440,7 +441,7 @@ function isExecutable(command: string, pathToCheck: string, log = false, outputA
 				commandIsExecutable = true;
 				break;
 			} catch (err) {
-				// Not found here.
+				// NOTE: Not found here.
 			}
 		}
 	}
@@ -460,3 +461,24 @@ function getFirstCommonElementInArray<T>(searchArray: unknown[], elementArray: r
 		(element): element is T => elementArray.includes(element as T)
 	) as T | undefined;
 }
+
+function init() {
+	process.title = `${process.cwd()}`;
+
+	for (const dir of path.resolve(process.env.PATH || "./").split(path.delimiter)) {
+		try {
+			const dirFiles = fs.readdirSync(dir);
+			dirFiles.map((file) => {
+				fs.accessSync(path.resolve(dir, file), fs.constants.X_OK);
+				if ([...shellCommands.escape, ...shellCommands.builtin].includes(file as string as any)) return;
+
+				tabCompletionOptions.push(file);
+			});
+		} catch (_err) {
+			// NOTE: No access
+		}
+	};
+
+	promptUser();
+}
+init();
