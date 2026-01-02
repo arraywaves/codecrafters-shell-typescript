@@ -4,16 +4,24 @@ import * as os from 'os';
 import * as path from 'path';
 import { exec, execFile } from "child_process";
 
-
-
 const rl = createInterface({
 	input: process.stdin,
 	output: process.stdout,
 	// prompt: `${process.cwd().split(path.sep)[process.cwd().split(path.sep).length - 1]} → `
 	completer: (line: string) => {
-		const completion = handleTabCompletion(line, tabCompletionOptions);
-		return completion;
-	}
+		const [matches, og] = handleTabCompletion(line, tabCompletionOptions);
+
+		if (matches.length > 1 && !tabCompletionArrayHit) {
+			if (Array.isArray(matches)) process.stdout.write('\n' + matches.join('  ') + '\n');
+
+			process.stdout.write('$ ' + line);
+
+			return [[], line];
+		}
+
+		return [matches, og];
+	},
+	terminal: true
 });
 
 const shellCommands = {
@@ -27,6 +35,8 @@ type Redirection = typeof redirectionOptions[number];
 let redirection: Redirection | undefined = undefined;
 
 const tabCompletionOptions: string[] = [...shellCommands.escape, ...shellCommands.builtin];
+let tabCompletionArrayHit = false;
+let previousLine = "";
 
 function promptUser() {
 	rl.question("$ ", processInput);
@@ -84,7 +94,7 @@ function processOutput({
 	if (!content) return;
 
 	const formattedContent = content?.trim().normalize();
-	const final = !formattedContent?.endsWith('\n')
+	const final = formattedContent.length > 0 && !formattedContent?.endsWith('\n')
 		? `${formattedContent}\n`
 		: formattedContent;
 
@@ -174,19 +184,28 @@ function handleTabCompletion(line: string, selection: string[]) {
 	) : matches;
 
 	if (processedMatches.length === 0) {
-		switch (process.platform) {
-			case "win32":
-				exec("powershell.exe [console]::beep(500,600)");
-				break;
-			case "darwin":
-				exec("afplay /System/Library/Sounds/Glass.aiff");
-				break;
-			default:
-				process.stderr.write('\x07');
-		}
+		playBell();
+	} else if ((processedMatches.length > 1 || line.length === 0) && !tabCompletionArrayHit && line !== previousLine) {
+		playBell();
+		tabCompletionArrayHit = true;
+	} else {
+		tabCompletionArrayHit = false
 	}
 
-	return [processedMatches, line.trim()];
+	previousLine = line;
+	return [processedMatches.sort(), line.trim()];
+}
+function playBell() {
+	switch (process.platform) {
+		case "win32":
+			exec("powershell.exe [console]::beep(500,600)");
+			break;
+		case "darwin":
+			exec("afplay /System/Library/Sounds/Glass.aiff");
+			break;
+		default:
+			process.stderr.write('\x07');
+	}
 }
 function handleExecutable(command: string, args: string[], outputArgs: string[] = []) {
 	try {
@@ -465,6 +484,7 @@ function getFirstCommonElementInArray<T>(searchArray: unknown[], elementArray: r
 function init() {
 	process.title = `${process.cwd()}`;
 
+	// Setup executables for completion
 	for (const dir of path.resolve(process.env.PATH || "./").split(path.delimiter)) {
 		try {
 			const dirFiles = fs.readdirSync(dir);
