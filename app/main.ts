@@ -3,23 +3,58 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { exec, execFile } from "child_process";
+import { Trie } from "./trie";
 
 const rl = createInterface({
 	input: process.stdin,
 	output: process.stdout,
 	// prompt: `${process.cwd().split(path.sep)[process.cwd().split(path.sep).length - 1]} → `
 	completer: (line: string) => {
-		const [matches, og] = handleTabCompletion(line, tabCompletionOptions);
+		const [matches, input] = handleTabCompletion(line);
 
-		if (matches.length > 1 && !tabCompletionArrayHit) {
-			if (Array.isArray(matches)) process.stdout.write('\n' + matches.join('  ') + '\n');
-
-			process.stdout.write('$ ' + line);
-
-			return [[], line];
+		if (matches.length === 0) {
+			// No matches
+			playBell();
+			return [[], input];
+		}
+		if (matches.length === 1) {
+			// End word
+			return [matches, input];
 		}
 
-		return [matches, og];
+		if (matches.length > 1) {
+			// Prefix (LCP)
+			const lcp = findLCP(matches);
+			const now = Date.now();
+			const isSecondTab = lastCompletion.line === line && (now - lastCompletion.timestamp) < 1000;
+
+			if (lcp.length > input.length) {
+				lastCompletion = { line: lcp, timestamp: now };
+				return [[lcp], input];
+			}
+
+			if (!isSecondTab) {
+				lastCompletion = { line, timestamp: now };
+				playBell();
+				return [[], input];
+			}
+
+			// Show Matches
+			const columns = process.stdout.columns || 80;
+			const maxLength = Math.max(...matches.map(m => m.length)) + 2;
+			const perRow = Math.floor(columns / maxLength);
+
+			process.stdout.write('\n');
+			for (let i = 0; i < matches.length; i += perRow) {
+				const row = matches.slice(i, i + perRow);
+				process.stdout.write(row.map(m => m.padEnd(maxLength)).join('') + '\n');
+			}
+
+			lastCompletion = { line, timestamp: now };
+			rl.prompt(true);
+
+			return [[], input];
+		}
 	},
 	terminal: true
 });
@@ -29,14 +64,12 @@ const shellCommands = {
 	builtin: ["echo", "type", "pwd", "cd"],
 } as const;
 type ShellCommand = typeof shellCommands.escape[number] | typeof shellCommands.builtin[number];
+const trie = new Trie();
+let lastCompletion = { line: '', timestamp: 0 };
 
 const redirectionOptions = ["2>", "2>>", "1>", "1>>", ">", ">>"] as const;
 type Redirection = typeof redirectionOptions[number];
 let redirection: Redirection | undefined = undefined;
-
-const tabCompletionOptions: string[] = [...shellCommands.escape, ...shellCommands.builtin];
-let tabCompletionArrayHit = false;
-let previousLine = "";
 
 function promptUser() {
 	rl.question("$ ", processInput);
@@ -174,26 +207,50 @@ function processOutput({
 	}
 }
 
-// Top Level
-function handleTabCompletion(line: string, selection: string[]) {
-	const matches = selection.filter(
-		cmd => cmd.startsWith(line.trim())
-	);
-	const processedMatches = matches.length === 1 ? matches.map(
-		match => match + " "
-	) : matches;
+function init() {
+	process.title = `sh: ${process.cwd()}`;
 
-	if (processedMatches.length === 0) {
-		playBell();
-	} else if ((processedMatches.length > 1 || line.length === 0) && !tabCompletionArrayHit && line !== previousLine) {
-		playBell();
-		tabCompletionArrayHit = true;
-	} else {
-		tabCompletionArrayHit = false
+	// Trie insert exe's and built-ins
+	for (const cmd of [...shellCommands.escape, ...shellCommands.builtin]) {
+		trie.insert(cmd);
+	}
+	for (const dir of path.resolve(process.env.PATH || "./").split(path.delimiter)) {
+		try {
+			const dirFiles = fs.readdirSync(dir);
+			dirFiles.map((exe) => {
+				fs.accessSync(path.resolve(dir, exe), fs.constants.X_OK);
+				trie.insert(exe);
+			});
+		} catch (_err) {
+			// NOTE: No access
+		}
+	};
+
+	promptUser();
+}
+init();
+
+// Top Level
+function handleTabCompletion(line: string): [string[], string] {
+	if (line.length === 0) return [[], line];
+
+	const input = line.trim();
+	const matches = trie.autocomplete(input);
+	if (matches.length === 0) {
+		return [[], input];
+	}
+	const exactMatch = trie.search(input)?.isEnd;
+	if (exactMatch) { // word
+		if (matches.length === 1) {
+			return [[input + " "], input];
+		}
+		return [matches.sort(), input];
+	}
+	if (matches.length === 1) { // prefix
+		return [[matches[0] + " "], input];
 	}
 
-	previousLine = line;
-	return [processedMatches.sort(), line.trim()];
+	return [matches.sort(), input];
 }
 function playBell() {
 	switch (process.platform) {
@@ -475,30 +532,20 @@ function isExecutable(command: string, pathToCheck: string, log = false, outputA
 }
 
 // Utils
+function findLCP(strings: string[]): string {
+	if (strings.length === 0) return "";
+
+	let prefix = strings[0];
+	for (let i = 1; i < strings.length; i++) {
+		while (strings[i].indexOf(prefix) !== 0) {
+			prefix = prefix.slice(0, -1);
+			if (prefix === "") return "";
+		}
+	}
+	return prefix;
+}
 function getFirstCommonElementInArray<T>(searchArray: unknown[], elementArray: readonly T[]): T | undefined {
 	return searchArray.find(
 		(element): element is T => elementArray.includes(element as T)
 	) as T | undefined;
 }
-
-function init() {
-	process.title = `${process.cwd()}`;
-
-	// Setup executables for completion
-	for (const dir of path.resolve(process.env.PATH || "./").split(path.delimiter)) {
-		try {
-			const dirFiles = fs.readdirSync(dir);
-			dirFiles.map((file) => {
-				fs.accessSync(path.resolve(dir, file), fs.constants.X_OK);
-				if ([...shellCommands.escape, ...shellCommands.builtin].includes(file as string as any)) return;
-
-				tabCompletionOptions.push(file);
-			});
-		} catch (_err) {
-			// NOTE: No access
-		}
-	};
-
-	promptUser();
-}
-init();
