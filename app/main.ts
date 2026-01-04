@@ -73,6 +73,7 @@ const trie = new Trie();
 let lastCompletion = { line: '', timestamp: 0 };
 
 const history = new Map<number, string>();
+let previousAppendSize = 0;
 
 function init() {
 	process.title = `sh: ${process.cwd()}`;
@@ -483,13 +484,19 @@ function handleHistory(args: string[], outputArgs: string[] = []) {
 					const getAppendFlag = parseFlag(args, "-a", 1);
 					const appendFilePath = getAppendFlag?.flagArgs[0] && path.resolve(getAppendFlag?.flagArgs[0]);
 
+					const appendedHistoryData = historyData.splice(
+						previousAppendSize,
+						historyData.length - previousAppendSize
+					);
+
 					try {
 						processOutput({
-							content: historyData.join("\n"),
+							content: appendedHistoryData.join("\n"),
 							shouldWrite: true,
 							writePath: appendFilePath,
 							redirection: ">>"
 						})
+						previousAppendSize = appendedHistoryData.length + previousAppendSize;
 					} catch (err) {
 						processOutput({
 							content: (err as Error).message,
