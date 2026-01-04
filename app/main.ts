@@ -419,7 +419,28 @@ function handleFormatting(line: string) {
 }
 
 // Built-in Commands
-function handleHistory(args: string[], _outputArgs: string[] = []) {
+function handleHistory(args: string[], outputArgs: string[] = []) {
+	if (args.includes("-r")) {
+		const historyFilePath = args[args.indexOf("-r") + 1]
+		path.resolve(historyFilePath);
+
+		try {
+			const data = fs.readFileSync(historyFilePath, "utf8");
+			for (const line of data.split("\n")) {
+				if (line.trim().length < 1) continue;
+				history.set(history.size + 1, line.trim());
+			}
+		} catch (err) {
+			processOutput({
+				content: (err as Error).message,
+				isError: true,
+				shouldWrite: outputArgs.length > 1,
+				writePath: outputArgs[1]
+			})
+		}
+		return;
+	}
+
 	for (const [key, value] of history.entries()) {
 		const kv = `${key}\ \ ${value}\n`;
 		if (args[0] && key <= (history.size - parseInt(args[0]))) continue;
