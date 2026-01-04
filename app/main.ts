@@ -4,6 +4,7 @@ import * as os from 'os';
 import * as path from 'path';
 import { exec, execFile } from "child_process";
 import { Trie } from "./trie";
+import { findLCP, getFirstCommonElementInArray } from "./utils";
 
 const rl = createInterface({
 	input: process.stdin,
@@ -21,7 +22,6 @@ const rl = createInterface({
 			// End word
 			return [matches, input];
 		}
-
 		if (matches.length > 1) {
 			// Prefix (LCP)
 			const lcp = findLCP(matches);
@@ -39,7 +39,7 @@ const rl = createInterface({
 				return [[], input];
 			}
 
-			// Show Matches
+			// Prefix (Show Matches)
 			const columns = process.stdout.columns || 80;
 			const maxLength = Math.max(...matches.map(m => m.length)) + 2;
 			const perRow = Math.floor(columns / maxLength);
@@ -61,20 +61,48 @@ const rl = createInterface({
 
 const shellCommands = {
 	escape: ["exit", "quit", "q", "escape", "esc"],
-	builtin: ["echo", "type", "pwd", "cd"],
+	builtin: ["echo", "type", "pwd", "cd", "history"],
 } as const;
 type ShellCommand = typeof shellCommands.escape[number] | typeof shellCommands.builtin[number];
-const trie = new Trie();
-let lastCompletion = { line: '', timestamp: 0 };
 
 const redirectionOptions = ["2>", "2>>", "1>", "1>>", ">", ">>"] as const;
 type Redirection = typeof redirectionOptions[number];
 let redirection: Redirection | undefined = undefined;
 
+const trie = new Trie();
+let lastCompletion = { line: '', timestamp: 0 };
+
+const history = new Map<number, string>();
+
+function init() {
+	process.title = `sh: ${process.cwd()}`;
+
+	// Trie insert exe's and built-ins
+	for (const cmd of [...shellCommands.escape, ...shellCommands.builtin]) {
+		trie.insert(cmd);
+	}
+	for (const dir of path.resolve(process.env.PATH || "./").split(path.delimiter)) {
+		try {
+			const dirFiles = fs.readdirSync(dir);
+			dirFiles.map((exe) => {
+				fs.accessSync(path.resolve(dir, exe), fs.constants.X_OK);
+				trie.insert(exe);
+			});
+		} catch (_err) {
+			// NOTE: No access
+		}
+	};
+
+	promptUser();
+}
+init();
+
 function promptUser() {
 	rl.question("$ ", processInput);
 }
 function processInput(line: string) {
+	history.set(history.size + 1, line);
+
 	const [root, ...args] = handleFormatting(line);
 	const redirect = getFirstCommonElementInArray(args, redirectionOptions);
 	let outputArgs: string[] = [];
@@ -207,29 +235,6 @@ function processOutput({
 	}
 }
 
-function init() {
-	process.title = `sh: ${process.cwd()}`;
-
-	// Trie insert exe's and built-ins
-	for (const cmd of [...shellCommands.escape, ...shellCommands.builtin]) {
-		trie.insert(cmd);
-	}
-	for (const dir of path.resolve(process.env.PATH || "./").split(path.delimiter)) {
-		try {
-			const dirFiles = fs.readdirSync(dir);
-			dirFiles.map((exe) => {
-				fs.accessSync(path.resolve(dir, exe), fs.constants.X_OK);
-				trie.insert(exe);
-			});
-		} catch (_err) {
-			// NOTE: No access
-		}
-	};
-
-	promptUser();
-}
-init();
-
 // Top Level
 function handleTabCompletion(line: string): [string[], string] {
 	if (line.length === 0) return [[], line];
@@ -322,6 +327,9 @@ function handleShellCommands(command: ShellCommand, args: string[], outputArgs: 
 			const checkBuiltIn = args[0];
 			handleType(checkBuiltIn || "", outputArgs);
 			break;
+		case "history":
+			handleHistory(args, outputArgs);
+			break;
 	}
 	promptUser();
 }
@@ -411,6 +419,21 @@ function handleFormatting(line: string) {
 }
 
 // Built-in Commands
+function handleHistory(_args: string[], outputArgs: string[] = []) {
+	// console.debug("History:", history);
+	let entries = "";
+	for (const [key, value] of history.entries()) {
+		entries += `\ \ \ \ ${key}\ \ ${value}${"\n"}`;
+	}
+
+	process.stdout.write(entries);
+
+	// processOutput({
+	// 	content: entries,
+	// 	shouldWrite: outputArgs.length > 1,
+	// 	writePath: outputArgs[1]
+	// })
+}
 function handleChangeDir(dir: string, outputArgs: string[] = []) {
 	try {
 		fs.accessSync(path.resolve(dir));
@@ -529,23 +552,4 @@ function isExecutable(command: string, pathToCheck: string, log = false, outputA
 		writePath: outputArgs[1]
 	});
 	return commandIsExecutable;
-}
-
-// Utils
-function findLCP(strings: string[]): string {
-	if (strings.length === 0) return "";
-
-	let prefix = strings[0];
-	for (let i = 1; i < strings.length; i++) {
-		while (strings[i].indexOf(prefix) !== 0) {
-			prefix = prefix.slice(0, -1);
-			if (prefix === "") return "";
-		}
-	}
-	return prefix;
-}
-function getFirstCommonElementInArray<T>(searchArray: unknown[], elementArray: readonly T[]): T | undefined {
-	return searchArray.find(
-		(element): element is T => elementArray.includes(element as T)
-	) as T | undefined;
 }

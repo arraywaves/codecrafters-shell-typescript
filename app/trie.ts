@@ -1,5 +1,6 @@
 class TrieNode {
 	children = new Map<string, TrieNode>();
+	// sibling = new Map<string, TrieNode>();
 	isEnd = false;
 }
 export class Trie {
@@ -13,6 +14,9 @@ export class Trie {
 		}
 		node.isEnd = true;
 	}
+	// delete(word: string) {
+	// 	const node = this.search(word);
+	// }
 	search(word: string): TrieNode | undefined {
 		let node = this.root;
 		for (const ch of word) {
