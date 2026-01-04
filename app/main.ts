@@ -78,6 +78,11 @@ let previousAppendSize = 0;
 function init() {
 	process.title = `sh: ${process.cwd()}`;
 
+	// Read history file
+	const historyFilePath = process.env.HISTFILE || "./log/history.txt";
+	if (historyFilePath) path.resolve(historyFilePath);
+	handleHistory([`-r`, historyFilePath]);
+
 	// Trie insert exe's and built-ins
 	for (const cmd of [...shellCommands.escape, ...shellCommands.builtin]) {
 		trie.insert(cmd);
