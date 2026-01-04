@@ -67,7 +67,7 @@ type ShellCommand = typeof shellCommands.escape[number] | typeof shellCommands.b
 
 const redirectionOptions = ["2>", "2>>", "1>", "1>>", ">", ">>"] as const;
 type Redirection = typeof redirectionOptions[number];
-let redirection: Redirection | undefined = undefined;
+let redirectionFlag: Redirection | undefined = undefined;
 
 const trie = new Trie();
 let lastCompletion = { line: '', timestamp: 0 };
@@ -112,7 +112,7 @@ function processInput(line: string) {
 		const redirectIndex = args.indexOf(redirect);
 
 		outputArgs = args.splice(redirectIndex, 2);
-		redirection = redirect;
+		redirectionFlag = redirect;
 	}
 	if (isShellCommand(root)) {
 		handleShellCommands(root, args, outputArgs);
@@ -147,11 +147,13 @@ function processOutput({
 	isError = false,
 	shouldWrite = false,
 	writePath = "output.txt",
+	redirection = redirectionFlag,
 }: {
 	content: string;
 	isError?: boolean;
 	shouldWrite?: boolean | undefined;
 	writePath?: string | undefined;
+	redirection?: string;
 }) {
 	if (!content) return;
 
@@ -423,6 +425,11 @@ function handleFormatting(line: string) {
 function handleHistory(args: string[], outputArgs: string[] = []) {
 	const hasFlags = args.filter((arg) => arg.startsWith("-"));
 	if (hasFlags) {
+		let historyData: string[] = [];
+		for (const [_k, v] of history.entries()) {
+			historyData.push(v);
+		}
+
 		for (const f of hasFlags) {
 			switch (f) {
 				case "-r":
@@ -452,35 +459,40 @@ function handleHistory(args: string[], outputArgs: string[] = []) {
 							writePath: outputArgs[1]
 						})
 					}
-
 					return;
 				case "-w":
 					const getWriteFlag = parseFlag(args, "-w", 1);
 					const writeFilePath = getWriteFlag?.flagArgs[0] && path.resolve(getWriteFlag?.flagArgs[0]);
 
-					if (writeFilePath) {
-						let historyData: string[] = [];
-						for (const [_k, v] of history.entries()) {
-							historyData.push(v);
-						}
-
-						try {
-							processOutput({
-								content: historyData.join("\n"),
-								shouldWrite: true,
-								writePath: writeFilePath
-							})
-						} catch (err) {
-							processOutput({
-								content: (err as Error).message,
-								isError: true,
-								shouldWrite: outputArgs.length > 1,
-								writePath: outputArgs[1]
-							})
-						}
-					} else {
+					try {
 						processOutput({
-							content: "history: No file path provided with -w flag",
+							content: historyData.join("\n"),
+							shouldWrite: true,
+							writePath: writeFilePath
+						})
+					} catch (err) {
+						processOutput({
+							content: (err as Error).message,
+							isError: true,
+							shouldWrite: outputArgs.length > 1,
+							writePath: outputArgs[1]
+						})
+					}
+					return;
+				case "-a":
+					const getAppendFlag = parseFlag(args, "-a", 1);
+					const appendFilePath = getAppendFlag?.flagArgs[0] && path.resolve(getAppendFlag?.flagArgs[0]);
+
+					try {
+						processOutput({
+							content: historyData.join("\n"),
+							shouldWrite: true,
+							writePath: appendFilePath,
+							redirection: ">>"
+						})
+					} catch (err) {
+						processOutput({
+							content: (err as Error).message,
 							isError: true,
 							shouldWrite: outputArgs.length > 1,
 							writePath: outputArgs[1]
