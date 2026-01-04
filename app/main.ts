@@ -419,20 +419,16 @@ function handleFormatting(line: string) {
 }
 
 // Built-in Commands
-function handleHistory(_args: string[], outputArgs: string[] = []) {
-	// console.debug("History:", history);
-	let entries = "";
+function handleHistory(args: string[], _outputArgs: string[] = []) {
 	for (const [key, value] of history.entries()) {
-		entries += `\ \ \ \ ${key}\ \ ${value}${"\n"}`;
+		const kv = `${key}\ \ ${value}\n`;
+		if (args[0] && key <= (history.size - parseInt(args[0]))) continue;
+
+		process.stdout.write("\ \ \ \ ".concat(kv), (err) => {
+			if (err) console.error((err as Error).message);
+			process.exitCode = 0;
+		});
 	}
-
-	process.stdout.write(entries);
-
-	// processOutput({
-	// 	content: entries,
-	// 	shouldWrite: outputArgs.length > 1,
-	// 	writePath: outputArgs[1]
-	// })
 }
 function handleChangeDir(dir: string, outputArgs: string[] = []) {
 	try {
