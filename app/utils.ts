@@ -15,3 +15,12 @@ export function getFirstCommonElementInArray<T>(searchArray: unknown[], elementA
 		(element): element is T => elementArray.includes(element as T)
 	) as T | undefined;
 }
+export function parseFlag(args: string[], flag: string, expectedArgumentCount: number): { flag: string, flagArgs: string[] } | undefined {
+	if (args.includes(flag)) {
+		const flagIndex = args.indexOf(flag);
+		const flagArgs = args.splice(flagIndex + 1, expectedArgumentCount);
+
+		return { flag, flagArgs };
+	}
+	return;
+}

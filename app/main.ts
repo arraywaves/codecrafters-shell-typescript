@@ -4,7 +4,7 @@ import * as os from 'os';
 import * as path from 'path';
 import { exec, execFile } from "child_process";
 import { Trie } from "./trie";
-import { findLCP, getFirstCommonElementInArray } from "./utils";
+import { findLCP, getFirstCommonElementInArray, parseFlag } from "./utils";
 
 const rl = createInterface({
 	input: process.stdin,
@@ -104,6 +104,7 @@ function processInput(line: string) {
 	history.set(history.size + 1, line);
 
 	const [root, ...args] = handleFormatting(line);
+
 	const redirect = getFirstCommonElementInArray(args, redirectionOptions);
 	let outputArgs: string[] = [];
 
@@ -420,30 +421,79 @@ function handleFormatting(line: string) {
 
 // Built-in Commands
 function handleHistory(args: string[], outputArgs: string[] = []) {
-	if (args.includes("-r")) {
-		const historyFilePath = args[args.indexOf("-r") + 1]
-		path.resolve(historyFilePath);
+	const hasFlags = args.filter((arg) => arg.startsWith("-"));
+	if (hasFlags) {
+		for (const f of hasFlags) {
+			switch (f) {
+				case "-r":
+					const getReadFlag = parseFlag(args, "-r", 1);
+					const readFilePath = getReadFlag?.flagArgs[0] && path.resolve(getReadFlag?.flagArgs[0]);
 
-		try {
-			const data = fs.readFileSync(historyFilePath, "utf8");
-			for (const line of data.split("\n")) {
-				if (line.trim().length < 1) continue;
-				history.set(history.size + 1, line.trim());
+					if (readFilePath) {
+						try {
+							const data = fs.readFileSync(readFilePath, "utf8");
+							for (const line of data.split("\n")) {
+								if (line.trim().length < 1) continue;
+								history.set(history.size + 1, line.trim());
+							}
+						} catch (err) {
+							processOutput({
+								content: (err as Error).message,
+								isError: true,
+								shouldWrite: outputArgs.length > 1,
+								writePath: outputArgs[1]
+							})
+						}
+					} else {
+						processOutput({
+							content: "history: No file path provided with -r flag",
+							isError: true,
+							shouldWrite: outputArgs.length > 1,
+							writePath: outputArgs[1]
+						})
+					}
+
+					return;
+				case "-w":
+					const getWriteFlag = parseFlag(args, "-w", 1);
+					const writeFilePath = getWriteFlag?.flagArgs[0] && path.resolve(getWriteFlag?.flagArgs[0]);
+
+					if (writeFilePath) {
+						let historyData: string[] = [];
+						for (const [_k, v] of history.entries()) {
+							historyData.push(v);
+						}
+
+						try {
+							processOutput({
+								content: historyData.join("\n"),
+								shouldWrite: true,
+								writePath: writeFilePath
+							})
+						} catch (err) {
+							processOutput({
+								content: (err as Error).message,
+								isError: true,
+								shouldWrite: outputArgs.length > 1,
+								writePath: outputArgs[1]
+							})
+						}
+					} else {
+						processOutput({
+							content: "history: No file path provided with -w flag",
+							isError: true,
+							shouldWrite: outputArgs.length > 1,
+							writePath: outputArgs[1]
+						})
+					}
+					return;
 			}
-		} catch (err) {
-			processOutput({
-				content: (err as Error).message,
-				isError: true,
-				shouldWrite: outputArgs.length > 1,
-				writePath: outputArgs[1]
-			})
 		}
-		return;
 	}
 
-	for (const [key, value] of history.entries()) {
-		const kv = `${key}\ \ ${value}\n`;
-		if (args[0] && key <= (history.size - parseInt(args[0]))) continue;
+	for (const [k, v] of history.entries()) {
+		const kv = `${k}\ \ ${v}\n`;
+		if (args[0] && k <= (history.size - Number.parseInt(args[0]))) continue;
 
 		process.stdout.write("\ \ \ \ ".concat(kv), (err) => {
 			if (err) console.error((err as Error).message);
