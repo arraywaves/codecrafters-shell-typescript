@@ -73,17 +73,15 @@ const trie = new Trie();
 let lastCompletion = { line: '', timestamp: 0 };
 
 const history = new Map<number, string>();
+const historyFilePath = path.resolve(process.env.HISTFILE || "./log/history.txt");
 let previousAppendSize = 0;
 
 function init() {
 	process.title = `sh: ${process.cwd()}`;
 
-	// Read history file
-	const historyFilePath = process.env.HISTFILE || "./log/history.txt";
-	if (historyFilePath) path.resolve(historyFilePath);
 	handleHistory([`-r`, historyFilePath]);
 
-	// Trie insert exe's and built-ins
+	// Trie insert commands
 	for (const cmd of [...shellCommands.escape, ...shellCommands.builtin]) {
 		trie.insert(cmd);
 	}
@@ -318,6 +316,18 @@ function handleExecutable(command: string, args: string[], outputArgs: string[] 
 }
 function handleShellCommands(command: ShellCommand, args: string[], outputArgs: string[] = []) {
 	if (isEscapeCommand(command)) {
+		try {
+			const historyData = Array.from(history.values()).join("\n");
+			fs.writeFileSync(historyFilePath, historyData + "\n");
+		} catch (err) {
+			processOutput({
+				content: `Error saving history: ${(err as Error).message}`,
+				isError: true,
+				shouldWrite: outputArgs.length > 1,
+				writePath: outputArgs[1]
+			})
+		}
+
 		rl.close();
 		process.exit(0);
 	}
@@ -431,10 +441,7 @@ function handleFormatting(line: string) {
 function handleHistory(args: string[], outputArgs: string[] = []) {
 	const hasFlags = args.filter((arg) => arg.startsWith("-"));
 	if (hasFlags) {
-		let historyData: string[] = [];
-		for (const [_k, v] of history.entries()) {
-			historyData.push(v);
-		}
+		const historyData = Array.from(history.values());
 
 		for (const f of hasFlags) {
 			switch (f) {
