@@ -74,12 +74,14 @@ let lastCompletion = { line: '', timestamp: 0 };
 
 const history = new Map<number, string>();
 const historyFilePath = path.resolve(process.env.HISTFILE || "./log/history.txt");
+let historySizeOnLoad = 0;
 let previousAppendSize = 0;
 
 function init() {
 	process.title = `sh: ${process.cwd()}`;
 
 	handleHistory([`-r`, historyFilePath]);
+	historySizeOnLoad = history.size;
 
 	// Trie insert commands
 	for (const cmd of [...shellCommands.escape, ...shellCommands.builtin]) {
@@ -317,19 +319,43 @@ function handleExecutable(command: string, args: string[], outputArgs: string[] 
 function handleShellCommands(command: ShellCommand, args: string[], outputArgs: string[] = []) {
 	if (isEscapeCommand(command)) {
 		try {
-			const historyData = Array.from(history.values()).join("\n");
-			fs.writeFileSync(historyFilePath, historyData + "\n");
+			const historyData = Array.from(history.values()).splice(historySizeOnLoad).join("\n");
+			// fs.writeFileSync(historyFilePath, historyData + "\n");
+			const writeStream = fs.createWriteStream(historyFilePath, { flags: 'a' });
+			writeStream.write(historyData + "\n", (err) => {
+				if (err) {
+					processOutput({
+						content: (err as Error).message,
+						isError: true
+					});
+				}
+				writeStream.end(() => {
+					rl.close();
+					process.exit(0);
+				});
+			});
+
+			writeStream.on('error', (err) => {
+				processOutput({
+					content: (err as Error).message,
+					isError: true
+				});
+
+				rl.close();
+				process.exit(1);
+			});
 		} catch (err) {
 			processOutput({
 				content: `Error saving history: ${(err as Error).message}`,
 				isError: true,
 				shouldWrite: outputArgs.length > 1,
 				writePath: outputArgs[1]
-			})
-		}
+			});
 
-		rl.close();
-		process.exit(0);
+			rl.close();
+			process.exit(1);
+		}
+		return;
 	}
 
 	switch (command) {
