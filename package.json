@@ -3,7 +3,9 @@
 	"description": "Build your own Shell challenge, from CodeCrafters",
 	"type": "module",
 	"scripts": {
-		"dev": "bun run app/main.ts"
+		"dev": "bun run app/main.ts",
+		"test": "codecrafters test",
+		"submit": "codecrafters submit"
 	},
 	"devDependencies": {
 		"@types/bun": "latest"

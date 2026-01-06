@@ -2,9 +2,9 @@ import { createInterface } from "readline";
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { exec, execFile } from "child_process";
+import { exec, execFile, spawn } from "child_process";
 import { Trie } from "./trie";
-import { findLCP, getFirstCommonElementInArray, parseFlag } from "./utils";
+import { findLCP, getFirstCommonElementInArray, parseFlag, splitPipeCommands } from "./utils";
 
 const rl = createInterface({
 	input: process.stdin,
@@ -108,18 +108,26 @@ function promptUser() {
 }
 function processInput(line: string) {
 	history.set(history.size + 1, line);
+	const tokens = handleFormatting(line);
+	if (isPipeline(tokens)) {
+		handlePipelines(tokens);
+		return;
+	}
 
-	const [root, ...args] = handleFormatting(line);
+	processLine(tokens);
+}
+function processLine(tokens: string[]) {
+	const [root, ...args] = tokens;
 
 	const redirect = getFirstCommonElementInArray(args, redirectionOptions);
 	let outputArgs: string[] = [];
-
 	if (redirect && isRedirect(redirect)) {
 		const redirectIndex = args.indexOf(redirect);
 
 		outputArgs = args.splice(redirectIndex, 2);
 		redirectionFlag = redirect;
 	}
+
 	if (isShellCommand(root)) {
 		handleShellCommands(root, args, outputArgs);
 		return;
@@ -140,7 +148,7 @@ function processInput(line: string) {
 
 	if (root) {
 		processOutput({
-			content: `${line}: command not found`,
+			content: `${tokens.join(" ")}: command not found`,
 			isError: true,
 			shouldWrite: outputArgs.length > 1,
 			writePath: outputArgs[1]
@@ -245,6 +253,37 @@ function processOutput({
 }
 
 // Top Level
+function handlePipelines(tokens: string[]) {
+	const lines = splitPipeCommands(tokens);
+	const processes = lines.map((line) => spawn(line.process[0], line.process.slice(1)));
+
+	for (let i = 0; i < processes.length - 1; i++) {
+		if (lines[i].fd === 2) {
+			processes[i].stderr.pipe(processes[i + 1].stdin);
+		} else {
+			processes[i].stdout.pipe(processes[i + 1].stdin);
+		}
+	}
+	processes[processes.length - 1].stdout.pipe(process.stdout);
+	processes[processes.length - 1].stderr.pipe(process.stderr);
+
+	Promise.all(processes.map(p => new Promise<void>((resolve, reject) => {
+		p.on('close', (code) => {
+			code === 0 ? resolve() : reject(new Error(`Process exited with code ${code}`));
+		});
+		p.on('error', reject);
+	})))
+		.then(() => {
+			promptUser();
+		})
+		.catch(err => {
+			processOutput({
+				content: err.message,
+				isError: true
+			});
+			promptUser();
+		});
+}
 function handleTabCompletion(line: string): [string[], string] {
 	if (line.length === 0) return [[], line];
 
@@ -458,7 +497,7 @@ function handleFormatting(line: string) {
 	}
 	if (currentToken.length > 0) {
 		tokens.push(currentToken)
-	};
+	}
 
 	return tokens;
 }
@@ -631,6 +670,9 @@ function handleType(checkCommand: string, outputArgs: string[] = []) {
 }
 
 // Helpers
+function isPipeline(args: string[]) {
+	return args.includes("\|") || args.includes("\|\&");
+}
 function isRedirect(redirect: string): redirect is Redirection {
 	return redirectionOptions.includes(redirect as any);
 }

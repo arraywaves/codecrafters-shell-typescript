@@ -24,3 +24,42 @@ export function parseFlag(args: string[], flag: string, expectedArgumentCount: n
 	}
 	return;
 }
+export function splitPipeCommands(tokens: string[]) {
+	if (tokens.length === 0) return [{ process: [] }];
+
+	const pipeIndices = tokens.reduce((acc, arg, index) => {
+		if (arg === '\|' || arg === '\|\&') acc.push(index);
+
+		return acc;
+	}, [] as number[]);
+	if (pipeIndices.length === 0) return [{ process: tokens }];
+
+	const processes: {
+		process: string[],
+		fd?: 1 | 2 | undefined
+	}[] = [];
+	let start = 0;
+
+	pipeIndices.forEach((pipeIndex) => {
+		processes.push({
+			process: tokens.slice(start, pipeIndex),
+			fd: getFD(tokens, pipeIndex)
+		});
+		start = pipeIndex + 1;
+	});
+	processes.push({
+		process: tokens.slice(start)
+	});
+
+	return processes;
+}
+function getFD(tokens: string[], pipeIndex: number) {
+	switch (tokens[pipeIndex]) {
+		case "\|":
+			return 1;
+		case "\|\&":
+			return 2;
+		default:
+			return undefined;
+	}
+}
