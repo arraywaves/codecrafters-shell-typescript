@@ -1,2 +1,12 @@
 echo hello
 echo world
+ls | type echo
+exit
+exit
+ls
+q
+ls
+q
+q
+asojgfasg
+q

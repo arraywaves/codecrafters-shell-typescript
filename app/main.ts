@@ -5,6 +5,7 @@ import * as path from 'path';
 import { exec, execFile, spawn } from "child_process";
 import { Trie } from "./trie";
 import { findLCP, getFirstCommonElementInArray, parseFlag, splitPipeCommands } from "./utils";
+import { PassThrough } from "stream";
 
 const rl = createInterface({
 	input: process.stdin,
@@ -108,15 +109,16 @@ function promptUser() {
 }
 function processInput(line: string) {
 	history.set(history.size + 1, line);
+
 	const tokens = handleFormatting(line);
+
 	if (isPipeline(tokens)) {
 		handlePipelines(tokens);
 		return;
 	}
-
 	processLine(tokens);
 }
-function processLine(tokens: string[]) {
+function processLine(tokens: string[], pipe = false) {
 	const [root, ...args] = tokens;
 
 	const redirect = getFirstCommonElementInArray(args, redirectionOptions);
@@ -146,15 +148,15 @@ function processLine(tokens: string[]) {
 		return;
 	}
 
-	if (root) {
+	if (root && !pipe) {
 		processOutput({
 			content: `${tokens.join(" ")}: command not found`,
 			isError: true,
 			shouldWrite: outputArgs.length > 1,
 			writePath: outputArgs[1]
 		})
+		promptUser();
 	}
-	promptUser();
 }
 function processOutput({
 	content,
@@ -253,9 +255,178 @@ function processOutput({
 }
 
 // Top Level
+function createBuiltinProcess(command: string, args: string[]) {
+	const stdout = new PassThrough();
+	const stderr = new PassThrough();
+	const stdin = new PassThrough();
+	const eventHandlers: { [key: string]: Function[] } = {};
+
+	const on = (event: string, handler: Function) => {
+		if (!eventHandlers[event]) eventHandlers[event] = [];
+		eventHandlers[event].push(handler);
+	};
+
+	const emit = (event: string, ...args: any[]) => {
+		(eventHandlers[event] || []).forEach(h => h(...args));
+	};
+
+	setImmediate(() => {
+		try {
+			let exitCode = 0;
+
+			switch (command) {
+				case "echo":
+					stdout.write(`${args.join(" ")}\n`);
+					break;
+
+				case "type": {
+					const checkCommand = args[0];
+					if (!checkCommand) {
+						stderr.write("type: please include an argument\n");
+						exitCode = 1;
+					} else if (isShellCommand(checkCommand)) {
+						stdout.write(`${checkCommand} is a shell builtin\n`);
+					} else {
+						const pathVariable = process.env.PATH || "";
+						const dirs = pathVariable.split(path.delimiter);
+						let found = false;
+
+						for (const dir of dirs) {
+							const fullPath = path.join(dir, checkCommand);
+							try {
+								fs.accessSync(fullPath, fs.constants.X_OK);
+								stdout.write(`${checkCommand}\n`);
+								found = true;
+								break;
+							} catch {
+								// continue searching
+							}
+						}
+
+						if (!found) {
+							stderr.write(`type: ${checkCommand} not found\n`);
+							exitCode = 1;
+						}
+					}
+					break;
+				}
+
+				case "pwd": {
+					stdout.write(`${process.cwd()}\n`);
+					break;
+				}
+
+				case "cd": {
+					const dir = args[0] || os.homedir();
+					try {
+						fs.accessSync(path.resolve(dir));
+						process.chdir(fs.realpathSync(path.resolve(dir)));
+					} catch {
+						stderr.write(`cd: ${path.resolve(dir)}: No such file or directory\n`);
+						exitCode = 1;
+					}
+					break;
+				}
+
+				case "history": {
+					const historyData = Array.from(history.values());
+					const hasFlags = args.filter((arg) => arg.startsWith("-"));
+
+					if (hasFlags.length > 0) {
+						for (const f of hasFlags) {
+							switch (f) {
+								case "-r": {
+									const getReadFlag = parseFlag(args, "-r", 1);
+									const readFilePath = getReadFlag?.flagArgs[0] && path.resolve(getReadFlag?.flagArgs[0]);
+
+									if (readFilePath) {
+										try {
+											const data = fs.readFileSync(readFilePath, "utf8");
+											for (const line of data.split("\n")) {
+												if (line.trim().length > 0) {
+													history.set(history.size + 1, line.trim());
+												}
+											}
+										} catch (err) {
+											stderr.write(`${(err as Error).message}\n`);
+											exitCode = 1;
+										}
+									} else {
+										stderr.write("history: No file path provided with -r flag\n");
+										exitCode = 1;
+									}
+									break;
+								}
+								case "-w": {
+									const getWriteFlag = parseFlag(args, "-w", 1);
+									const writeFilePath = getWriteFlag?.flagArgs[0] && path.resolve(getWriteFlag?.flagArgs[0]);
+
+									if (writeFilePath) {
+										stdout.write(historyData.join("\n") + "\n");
+									} else {
+										stderr.write("history: No file path provided with -w flag\n");
+										exitCode = 1;
+									}
+									break;
+								}
+								case "-a": {
+									const getAppendFlag = parseFlag(args, "-a", 1);
+									const appendFilePath = getAppendFlag?.flagArgs[0] && path.resolve(getAppendFlag?.flagArgs[0]);
+
+									if (appendFilePath) {
+										const appendedHistoryData = historyData.splice(
+											previousAppendSize,
+											historyData.length - previousAppendSize
+										);
+										stdout.write(appendedHistoryData.join("\n") + "\n");
+										previousAppendSize = previousAppendSize + appendedHistoryData.length;
+									} else {
+										stderr.write("history: No file path provided with -a flag\n");
+										exitCode = 1;
+									}
+									break;
+								}
+							}
+						}
+					} else {
+						const lastN = args[0] ? Number.parseInt(args[0]) : history.size;
+
+						for (const [k, v] of history.entries()) {
+							if (k > history.size - lastN) {
+								stdout.write(`    ${k}  ${v}\n`);
+							}
+						}
+					}
+					break;
+				}
+
+				default:
+					stderr.write(`${command}: command not found\n`);
+					exitCode = 1;
+			}
+
+			stdout.end();
+			stderr.end();
+			emit('close', exitCode);
+		} catch (err) {
+			stderr.write(`${(err as Error).message}\n`);
+			stderr.end();
+			stdout.end();
+			emit('close', 1);
+		}
+	});
+
+	return { stdout, stderr, stdin, on };
+}
 function handlePipelines(tokens: string[]) {
 	const lines = splitPipeCommands(tokens);
-	const processes = lines.map((line) => spawn(line.process[0], line.process.slice(1)));
+
+	const processes = lines.map((line) => {
+		if (isShellCommand(line.process[0])) {
+			return createBuiltinProcess(line.process[0], line.process.slice(1));
+		}
+		return spawn(line.process[0], line.process.slice(1));
+	});
 
 	for (let i = 0; i < processes.length - 1; i++) {
 		if (lines[i].fd === 2) {
@@ -268,10 +439,14 @@ function handlePipelines(tokens: string[]) {
 	processes[processes.length - 1].stderr.pipe(process.stderr);
 
 	Promise.all(processes.map(p => new Promise<void>((resolve, reject) => {
-		p.on('close', (code) => {
-			code === 0 ? resolve() : reject(new Error(`Process exited with code ${code}`));
-		});
-		p.on('error', reject);
+		if (p.on) {
+			p.on('close', (code: any) => {
+				code === 0 ? resolve() : reject(new Error(`Process exited with code ${code}`));
+			});
+			p.on('error', reject);
+		} else {
+			resolve();
+		}
 	})))
 		.then(() => {
 			promptUser();
@@ -359,38 +534,21 @@ function handleShellCommands(command: ShellCommand, args: string[], outputArgs: 
 	if (isEscapeCommand(command)) {
 		try {
 			const historyData = Array.from(history.values()).splice(historySizeOnLoad).join("\n");
-			// fs.writeFileSync(historyFilePath, historyData + "\n");
 			const writeStream = fs.createWriteStream(historyFilePath, { flags: 'a' });
-			writeStream.write(historyData + "\n", (err) => {
-				if (err) {
-					processOutput({
-						content: (err as Error).message,
-						isError: true
-					});
-				}
-				writeStream.end(() => {
-					rl.close();
-					process.exit(0);
-				});
+			// fs.writeFileSync(historyFilePath, historyData + "\n");
+
+			writeStream.write(historyData + "\n", () => {
+				writeStream.end();
 			});
-
-			writeStream.on('error', (err) => {
-				processOutput({
-					content: (err as Error).message,
-					isError: true
-				});
-
+			writeStream.on('finish', () => {
+				rl.close();
+				process.exit(0);
+			});
+			writeStream.on('error', () => {
 				rl.close();
 				process.exit(1);
 			});
 		} catch (err) {
-			processOutput({
-				content: `Error saving history: ${(err as Error).message}`,
-				isError: true,
-				shouldWrite: outputArgs.length > 1,
-				writePath: outputArgs[1]
-			});
-
 			rl.close();
 			process.exit(1);
 		}
