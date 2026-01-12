@@ -78,32 +78,6 @@ const historyFilePath = path.resolve(process.env.HISTFILE || "./log/history.txt"
 let historySizeOnLoad = 0;
 let previousAppendSize = 0;
 
-function init() {
-	process.title = `sh: ${process.cwd()}`;
-
-	handleHistory([`-r`, historyFilePath]);
-	historySizeOnLoad = history.size;
-
-	// Trie insert commands
-	for (const cmd of [...shellCommands.escape, ...shellCommands.builtin]) {
-		trie.insert(cmd);
-	}
-	for (const dir of path.resolve(process.env.PATH || "./").split(path.delimiter)) {
-		try {
-			const dirFiles = fs.readdirSync(dir);
-			dirFiles.map((exe) => {
-				fs.accessSync(path.resolve(dir, exe), fs.constants.X_OK);
-				trie.insert(exe);
-			});
-		} catch (_err) {
-			// NOTE: No access
-		}
-	};
-
-	promptUser();
-}
-init();
-
 function promptUser() {
 	rl.question("$ ", processInput);
 }
@@ -255,7 +229,7 @@ function processOutput({
 }
 
 // Top Level
-function createBuiltinProcess(command: string, args: string[]) {
+const createBuiltinProcess = (command: string, args: string[]) => {
 	const stdout = new PassThrough();
 	const stderr = new PassThrough();
 	const stdin = new PassThrough();
@@ -265,9 +239,8 @@ function createBuiltinProcess(command: string, args: string[]) {
 		if (!eventHandlers[event]) eventHandlers[event] = [];
 		eventHandlers[event].push(handler);
 	};
-
 	const emit = (event: string, ...args: any[]) => {
-		(eventHandlers[event] || []).forEach(h => h(...args));
+		(eventHandlers[event] || []).forEach(handler => handler(...args));
 	};
 
 	setImmediate(() => {
@@ -296,6 +269,7 @@ function createBuiltinProcess(command: string, args: string[]) {
 							try {
 								fs.accessSync(fullPath, fs.constants.X_OK);
 								stdout.write(`${checkCommand}\n`);
+
 								found = true;
 								break;
 							} catch {
@@ -418,7 +392,7 @@ function createBuiltinProcess(command: string, args: string[]) {
 
 	return { stdout, stderr, stdin, on };
 }
-function handlePipelines(tokens: string[]) {
+const handlePipelines = (tokens: string[]) => {
 	const lines = splitPipeCommands(tokens);
 
 	const processes = lines.map((line) => {
@@ -459,7 +433,7 @@ function handlePipelines(tokens: string[]) {
 			promptUser();
 		});
 }
-function handleTabCompletion(line: string): [string[], string] {
+const handleTabCompletion = (line: string): [string[], string] => {
 	if (line.length === 0) return [[], line];
 
 	const input = line.trim();
@@ -480,7 +454,7 @@ function handleTabCompletion(line: string): [string[], string] {
 
 	return [matches.sort(), input];
 }
-function playBell() {
+const playBell = () => {
 	switch (process.platform) {
 		case "win32":
 			exec("powershell.exe [console]::beep(500,600)");
@@ -492,7 +466,7 @@ function playBell() {
 			process.stderr.write('\x07');
 	}
 }
-function handleExecutable(command: string, args: string[], outputArgs: string[] = []) {
+const handleExecutable = (command: string, args: string[], outputArgs: string[] = []) => {
 	try {
 		execFile(command, args, (err, stdout, stderr) => {
 			if (err && !stderr) {
@@ -530,7 +504,7 @@ function handleExecutable(command: string, args: string[], outputArgs: string[] 
 		promptUser();
 	}
 }
-function handleShellCommands(command: ShellCommand, args: string[], outputArgs: string[] = []) {
+const handleShellCommands = (command: ShellCommand, args: string[], outputArgs: string[] = []) => {
 	if (isEscapeCommand(command)) {
 		try {
 			const historyData = Array.from(history.values()).splice(historySizeOnLoad).join("\n");
@@ -575,7 +549,7 @@ function handleShellCommands(command: ShellCommand, args: string[], outputArgs: 
 	}
 	promptUser();
 }
-function handleFormatting(line: string) {
+const handleFormatting = (line: string) => {
 	const formattedLine = line.normalize("NFC");
 	const tokens: string[] = [];
 	const delimiters = ["\ ", "\t"];
@@ -661,7 +635,7 @@ function handleFormatting(line: string) {
 }
 
 // Built-in Commands
-function handleHistory(args: string[], outputArgs: string[] = []) {
+const handleHistory = (args: string[], outputArgs: string[] = []) => {
 	const hasFlags = args.filter((arg) => arg.startsWith("-"));
 	if (hasFlags) {
 		const historyData = Array.from(history.values());
@@ -755,7 +729,7 @@ function handleHistory(args: string[], outputArgs: string[] = []) {
 		});
 	}
 }
-function handleChangeDir(dir: string, outputArgs: string[] = []) {
+const handleChangeDir = (dir: string, outputArgs: string[] = []) => {
 	try {
 		fs.accessSync(path.resolve(dir));
 		process.chdir(fs.realpathSync(path.resolve(dir)));
@@ -768,7 +742,7 @@ function handleChangeDir(dir: string, outputArgs: string[] = []) {
 		})
 	}
 }
-function handlePrintWorkingDir(outputArgs: string[] = []) {
+const handlePrintWorkingDir = (outputArgs: string[] = []) => {
 	try {
 		processOutput({
 			content: process.cwd(),
@@ -783,7 +757,7 @@ function handlePrintWorkingDir(outputArgs: string[] = []) {
 		})
 	}
 }
-function handleEcho(args: string[], outputArgs: string[] = []) {
+const handleEcho = (args: string[], outputArgs: string[] = []) => {
 	try {
 		processOutput({
 			content: `${args.join(" ")}`,
@@ -798,7 +772,7 @@ function handleEcho(args: string[], outputArgs: string[] = []) {
 		})
 	}
 }
-function handleType(checkCommand: string, outputArgs: string[] = []) {
+const handleType = (checkCommand: string, outputArgs: string[] = []) => {
 	if (checkCommand === "") {
 		processOutput({
 			content: "type: please include an argument",
@@ -828,22 +802,22 @@ function handleType(checkCommand: string, outputArgs: string[] = []) {
 }
 
 // Helpers
-function isPipeline(args: string[]) {
+const isPipeline = (args: string[]) => {
 	return args.includes("\|") || args.includes("\|\&");
 }
-function isRedirect(redirect: string): redirect is Redirection {
+const isRedirect = (redirect: string): redirect is Redirection => {
 	return redirectionOptions.includes(redirect as any);
 }
-function isShellCommand(command: string): command is ShellCommand {
+const isShellCommand = (command: string): command is ShellCommand => {
 	return isEscapeCommand(command) || isShellBuiltInCommand(command);
 }
-function isEscapeCommand(command: string): command is typeof shellCommands.escape[number] {
+const isEscapeCommand = (command: string): command is typeof shellCommands.escape[number] => {
 	return shellCommands.escape.includes(command as any);
 }
-function isShellBuiltInCommand(command: string): command is typeof shellCommands.builtin[number] {
+const isShellBuiltInCommand = (command: string): command is typeof shellCommands.builtin[number] => {
 	return shellCommands.builtin.includes(command as any);
 }
-function isExecutable(command: string, pathToCheck: string, log = false, outputArgs: string[] = []) {
+const isExecutable = (command: string, pathToCheck: string, log = false, outputArgs: string[] = []) => {
 	let commandIsExecutable = false;
 	let directories = pathToCheck.split(path.delimiter);
 
@@ -877,3 +851,29 @@ function isExecutable(command: string, pathToCheck: string, log = false, outputA
 	});
 	return commandIsExecutable;
 }
+
+const init = () => {
+	process.title = `sh: ${process.cwd()}`;
+
+	handleHistory([`-r`, historyFilePath]);
+	historySizeOnLoad = history.size;
+
+	// Trie insert commands
+	for (const cmd of [...shellCommands.escape, ...shellCommands.builtin]) {
+		trie.insert(cmd);
+	}
+	for (const dir of path.resolve(process.env.PATH || "./").split(path.delimiter)) {
+		try {
+			const dirFiles = fs.readdirSync(dir);
+			dirFiles.map((exe) => {
+				fs.accessSync(path.resolve(dir, exe), fs.constants.X_OK);
+				trie.insert(exe);
+			});
+		} catch (_err) {
+			// NOTE: No access
+		}
+	};
+
+	promptUser();
+}
+init();

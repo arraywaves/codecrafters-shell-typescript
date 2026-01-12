@@ -14,20 +14,22 @@ export class Trie {
 		}
 		node.isEnd = true;
 	}
-	// delete(word: string) {
-	// 	const node = this.search(word);
-	// }
+	// delete() {}
+	// clear() {}
+	// _cache() {}
 	search(word: string): TrieNode | undefined {
 		let node = this.root;
 		for (const ch of word) {
 			if (!node.children.has(ch)) return undefined;
 			node = node.children.get(ch)!;
 		}
+
 		return node;
 	}
 	autocomplete(prefix: string): string[] {
 		const node = this.search(prefix);
 		if (!node) return [];
+
 		return this._collect(node, prefix, []);
 	}
 	_collect(node: TrieNode | undefined, word: string, results: string[]): string[] {
@@ -36,6 +38,7 @@ export class Trie {
 		for (const [ch, nextNode] of node?.children || []) {
 			this._collect(nextNode, word + ch, results);
 		}
+
 		return results;
 	}
 }

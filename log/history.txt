@@ -10,3 +10,12 @@ q
 q
 asojgfasg
 q
+echo yo
+history
+damn
+history
+q
+history
+quit
+history | grep dam
+exit

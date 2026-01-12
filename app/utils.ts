@@ -1,4 +1,4 @@
-export function findLCP(strings: string[]): string {
+export const findLCP = (strings: string[]): string => {
 	if (strings.length === 0) return "";
 
 	let prefix = strings[0];
@@ -10,12 +10,12 @@ export function findLCP(strings: string[]): string {
 	}
 	return prefix;
 }
-export function getFirstCommonElementInArray<T>(searchArray: unknown[], elementArray: readonly T[]): T | undefined {
+export const getFirstCommonElementInArray = <T>(searchArray: unknown[], elementArray: readonly T[]): T | undefined => {
 	return searchArray.find(
 		(element): element is T => elementArray.includes(element as T)
 	) as T | undefined;
 }
-export function parseFlag(args: string[], flag: string, expectedArgumentCount: number): { flag: string, flagArgs: string[] } | undefined {
+export const parseFlag = (args: string[], flag: string, expectedArgumentCount: number): { flag: string, flagArgs: string[] } | undefined => {
 	if (args.includes(flag)) {
 		const flagIndex = args.indexOf(flag);
 		const flagArgs = args.splice(flagIndex + 1, expectedArgumentCount);
@@ -24,7 +24,7 @@ export function parseFlag(args: string[], flag: string, expectedArgumentCount: n
 	}
 	return;
 }
-export function splitPipeCommands(tokens: string[]) {
+export const splitPipeCommands = (tokens: string[]) => {
 	if (tokens.length === 0) return [{ process: [] }];
 
 	const pipeIndices = tokens.reduce((acc, arg, index) => {
@@ -53,7 +53,7 @@ export function splitPipeCommands(tokens: string[]) {
 
 	return processes;
 }
-function getFD(tokens: string[], pipeIndex: number) {
+const getFD = (tokens: string[], pipeIndex: number) => {
 	switch (tokens[pipeIndex]) {
 		case "\|":
 			return 1;
